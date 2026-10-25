@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import type { ClassifiedRelease } from '../src/categories.ts';
-import { openReleaseStore } from '../src/store.ts';
+import { openReleaseStore } from '../src/releases.ts';
 
 const RELEASE: ClassifiedRelease = {
   version: '2.1.3',

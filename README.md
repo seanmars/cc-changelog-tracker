@@ -37,8 +37,6 @@
 | `releases` | 版本號 | 翻譯後的 release JSON |
 | `logs` | 自動編號 | 時間, 等級, 訊息. 只保留最新 1000 筆 |
 
-啟動時若找到舊版的 `data/state.json`, 而且 DB 還沒有進度, 會自動匯入, 並把原檔改名為 `state.json.imported`.
-
 ## 部署到樹莓派 (Docker)
 
 需要 Pi 4 或 Pi 5, 並安裝 64-bit OS. Claude Code 沒有 32-bit ARM 版本.
@@ -50,8 +48,6 @@
 5. 在後台的 Logs 區塊確認出現「初始化完成」.
 
 設定和進度保存在 Docker volume `tracker-data`. 只要不刪除這個 volume, 重新 build 也不會重複通知, 也不用重新設定.
-
-舊版放在 `.env` 的 `DISCORD_WEBHOOK_URL` 等設定已不再使用, 升級後要到後台重新填入.
 
 ## 開發
 

@@ -1,4 +1,3 @@
-import { existsSync, readFileSync, renameSync } from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
 
 export interface State {
@@ -32,13 +31,4 @@ export function openStateStore(db: DatabaseSync): StateStore {
       upsert.run(state.lastVersion, state.etag);
     },
   };
-}
-
-// 從舊版的 state.json 匯入一次. 匯入後改名為 .imported, 避免重複匯入, 也保留原始檔案.
-export function importLegacyState(store: StateStore, path: string): boolean {
-  if (!existsSync(path) || store.load().lastVersion !== null) return false;
-  const legacy = JSON.parse(readFileSync(path, 'utf8')) as State;
-  store.save({ lastVersion: legacy.lastVersion ?? null, etag: legacy.etag ?? null });
-  renameSync(path, `${path}.imported`);
-  return true;
 }

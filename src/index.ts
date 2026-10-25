@@ -5,19 +5,19 @@ import { openDatabase } from './db.ts';
 import { buildMessages, sendMessage } from './discord.ts';
 import { fetchChangelog } from './fetcher.ts';
 import { openLogStore, type LogLevel } from './logs.ts';
+import { openReleaseStore } from './releases.ts';
 import { createScheduler } from './scheduler.ts';
 import { createAdminServer } from './server.ts';
 import { openSettingsStore, parseSettings, type TrackerConfig } from './settings.ts';
-import { importLegacyState, openStateStore } from './state.ts';
-import { openReleaseStore } from './store.ts';
+import { openStateStore } from './state.ts';
 import { checkOnce, processRelease, type TrackerDeps } from './tracker.ts';
 import { createTranslator } from './translator.ts';
 
 const serverConfig = loadServerConfig();
 const db = openDatabase(serverConfig.dbPath);
-const stateStore = openStateStore(db);
-const store = openReleaseStore(db);
 const settingsStore = openSettingsStore(db);
+const stateStore = openStateStore(db);
+const releaseStore = openReleaseStore(db);
 const logStore = openLogStore(db);
 
 // 同時寫到 console 和 DB, 後台的 Logs 區塊讀取 DB.
@@ -28,10 +28,6 @@ function log(level: LogLevel, message: string): void {
   logStore.add(level, message);
 }
 
-if (importLegacyState(stateStore, serverConfig.legacyStatePath)) {
-  log('info', `已從 ${serverConfig.legacyStatePath} 匯入進度, 原檔改名為 .imported`);
-}
-
 // 每次檢查都用最新的設定建立, 後台改了設定就會在下次檢查生效.
 function createDeps(config: TrackerConfig): TrackerDeps {
   return {
@@ -40,7 +36,7 @@ function createDeps(config: TrackerConfig): TrackerDeps {
     saveState: async (state) => stateStore.save(state),
     classify: createClassifier(config.claudeModel, config.claudeAuth),
     translate: createTranslator(config.geminiApiKey, config.geminiModel),
-    save: async (release) => store.put(release),
+    save: async (release) => releaseStore.put(release),
     notify: async (release) => {
       for (const message of buildMessages(release, config.linkUrl)) {
         await sendMessage(config.discordWebhookUrl, message);

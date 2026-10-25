@@ -3,7 +3,6 @@ import { existsSync } from 'node:fs';
 // 啟動 server 前就需要的設定. 其他設定都在後台管理, 存在 SQLite.
 export interface ServerConfig {
   dbPath: string;
-  legacyStatePath: string;
   host: string;
   port: number;
 }
@@ -18,8 +17,6 @@ export function loadServerConfig(): ServerConfig {
 
   return {
     dbPath: process.env.DB_PATH ?? 'data/tracker.db',
-    // 舊版的 state.json 位置, 只在啟動時匯入一次.
-    legacyStatePath: process.env.STATE_PATH ?? 'data/state.json',
     // 後台沒有密碼, 預設只接受本機連線. Docker image 中改為 0.0.0.0.
     host: process.env.HOST ?? '127.0.0.1',
     port,

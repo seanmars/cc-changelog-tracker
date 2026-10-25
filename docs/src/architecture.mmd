@@ -15,8 +15,8 @@ flowchart LR
     classifier["classifier.ts<br/>分類 + 英文摘要"]
     translator["translator.ts<br/>翻譯成正體中文"]
     discord["discord.ts<br/>組 embed 並送出"]
-    state["state.ts<br/>讀寫進度 / 匯入舊檔"]
-    store["store.ts<br/>儲存翻譯結果"]
+    state["state.ts<br/>讀寫進度"]
+    releases["releases.ts<br/>儲存翻譯結果"]
   end
 
   subgraph ext["外部服務"]
@@ -46,7 +46,7 @@ flowchart LR
   tracker --> translator
   tracker --> discord
   tracker --> state
-  tracker --> store
+  tracker --> releases
   fetcher -->|"HTTP GET"| github
   classifier -->|"Agent SDK 子程序"| claude
   translator -->|"interactions.create"| gemini
@@ -54,4 +54,4 @@ flowchart LR
   settings -->|"settings 表"| dbfile
   logs -->|"logs 表"| dbfile
   state -->|"state 表"| dbfile
-  store -->|"releases 表"| dbfile
+  releases -->|"releases 表"| dbfile
