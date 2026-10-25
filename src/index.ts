@@ -9,7 +9,7 @@ import { createScheduler } from './scheduler.ts';
 import { createAdminServer } from './server.ts';
 import { openSettingsStore, parseSettings, type ParseResult, type TrackerConfig } from './settings.ts';
 import { openStateStore } from './state.ts';
-import { checkOnce, fetchRecent, notifyLatest, notifyVersion, type TrackerDeps } from './tracker.ts';
+import { checkOnce, fetchRecent, notifyLatest, notifyVersion, retranslate, type TrackerDeps } from './tracker.ts';
 import { createTranslator } from './translator.ts';
 
 const serverConfig = loadServerConfig();
@@ -34,9 +34,10 @@ function createDeps(config: TrackerConfig): TrackerDeps {
     loadState: async () => stateStore.load(),
     saveState: async (state) => stateStore.save(state),
     classify: createClassifier(config.claudeModel, config.claudeAuth),
-    translate: createTranslator(config.geminiApiKey, config.geminiModel),
+    translate: createTranslator(config.geminiApiKey, config.geminiModel, config.translationPrompt),
     find: async (version) => releaseStore.get(version),
-    save: async (release) => releaseStore.put(release),
+    findSource: async (version) => releaseStore.getSource(version),
+    save: async (release, source) => releaseStore.put(release, source),
     notify: async (release) => {
       for (const message of buildMessages(release, config.linkUrl)) {
         await sendMessage(config.discordWebhookUrl, message);
@@ -89,6 +90,7 @@ if (args.has('--notify-latest')) {
     fetchRecent: startFetch,
     isFetching: () => fetchJob !== null,
     notifyVersion: (version) => notifyVersion(createDeps(requireConfig()), version),
+    retranslate: (version) => retranslate(createDeps(requireConfig()), version),
   });
 
   const controller = new AbortController();

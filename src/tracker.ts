@@ -10,15 +10,20 @@ export interface TrackerDeps {
   classify(release: Release): Promise<ClassifiedRelease>;
   translate(release: ClassifiedRelease): Promise<ClassifiedRelease>;
   find(version: string): Promise<ClassifiedRelease | undefined>;
-  save(release: ClassifiedRelease): Promise<void>;
+  findSource(version: string): Promise<ClassifiedRelease | undefined>;
+  save(release: ClassifiedRelease, source: ClassifiedRelease): Promise<void>;
   notify(release: ClassifiedRelease): Promise<void>;
   log(message: string): void;
 }
 
 async function translateRelease(deps: TrackerDeps, release: Release): Promise<ClassifiedRelease> {
-  const classified = await deps.classify(release);
-  const translated = await deps.translate(classified);
-  await deps.save(translated);
+  return translateSource(deps, await deps.classify(release));
+}
+
+// 翻譯分類後的原文, 原文和翻譯結果一起存, 之後可以只重新翻譯.
+async function translateSource(deps: TrackerDeps, source: ClassifiedRelease): Promise<ClassifiedRelease> {
+  const translated = await deps.translate(source);
+  await deps.save(translated, source);
   return translated;
 }
 
@@ -62,16 +67,31 @@ export async function fetchRecent(deps: TrackerDeps, count: number): Promise<voi
   deps.log(`最近 ${recent.length} 個版本抓取完成`);
 }
 
+async function findInChangelog(deps: TrackerDeps, version: string): Promise<Release> {
+  const release = (await fetchAllReleases(deps)).find((r) => r.version === version);
+  if (!release) throw new Error(`CHANGELOG 中找不到版本 ${version}`);
+  return release;
+}
+
 // 手動送出指定版本的通知. DB 沒有這個版本時, 先分類和翻譯.
 export async function notifyVersion(deps: TrackerDeps, version: string): Promise<void> {
-  let release = await deps.find(version);
-  if (!release) {
-    const source = (await fetchAllReleases(deps)).find((r) => r.version === version);
-    if (!source) throw new Error(`CHANGELOG 中找不到版本 ${version}`);
-    release = await translateRelease(deps, source);
-  }
+  const release = (await deps.find(version)) ?? (await translateRelease(deps, await findInChangelog(deps, version)));
   deps.log(`手動送出版本 ${version} 的通知`);
   await deps.notify(release);
+}
+
+// 用目前的翻譯 prompt 重新翻譯並覆寫 DB, 不送通知.
+// 有保存原文時只重新翻譯. 舊資料沒有原文時, 重新下載 CHANGELOG 並分類.
+export async function retranslate(deps: TrackerDeps, version: string): Promise<void> {
+  const source = await deps.findSource(version);
+  if (source) {
+    deps.log(`重新翻譯版本 ${version}`);
+    await translateSource(deps, source);
+  } else {
+    deps.log(`重新翻譯版本 ${version}: 沒有保存原文, 重新下載 CHANGELOG 並分類`);
+    await translateRelease(deps, await findInChangelog(deps, version));
+  }
+  deps.log(`版本 ${version} 重新翻譯完成`);
 }
 
 export async function checkOnce(deps: TrackerDeps): Promise<void> {

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { errorMessage, type LogStore } from './logs.ts';
 import type { ReleaseStore } from './releases.ts';
-import { mergeSettings, parseSettings, type SettingsStore } from './settings.ts';
+import { DEFAULT_SETTINGS, mergeSettings, parseSettings, type SettingsStore } from './settings.ts';
 import type { State } from './state.ts';
 
 const ADMIN_HTML = readFileSync(new URL('./admin.html', import.meta.url));
@@ -20,6 +20,7 @@ export interface AdminDeps {
   fetchRecent(count: number): boolean;
   isFetching(): boolean;
   notifyVersion(version: string): Promise<void>;
+  retranslate(version: string): Promise<void>;
 }
 
 interface AdminStatus {
@@ -61,6 +62,9 @@ async function handle(deps: AdminDeps, req: IncomingMessage, res: ServerResponse
       return sendJson(res, 200, getStatus(deps));
     case 'GET /api/settings':
       return sendJson(res, 200, deps.settings.load());
+    // 後台的「還原預設」用這裡的值.
+    case 'GET /api/settings/defaults':
+      return sendJson(res, 200, DEFAULT_SETTINGS);
     case 'PUT /api/settings': {
       const input = await readJsonObject(req);
       deps.settings.save(mergeSettings(deps.settings.load(), input));
@@ -82,9 +86,13 @@ async function handle(deps: AdminDeps, req: IncomingMessage, res: ServerResponse
       return sendJson(res, 202, getStatus(deps));
     }
     case 'POST /api/releases/notify': {
-      const { version } = await readJsonObject(req);
-      if (typeof version !== 'string' || version === '') throw new HttpError(400, 'version 必須是非空字串');
+      const version = await readVersion(req);
       await deps.notifyVersion(version);
+      return sendJson(res, 200, { version });
+    }
+    case 'POST /api/releases/retranslate': {
+      const version = await readVersion(req);
+      await deps.retranslate(version);
       return sendJson(res, 200, { version });
     }
     default:
@@ -100,6 +108,12 @@ function getStatus(deps: AdminDeps): AdminStatus {
     lastVersion: deps.loadState().lastVersion,
     fetching: deps.isFetching(),
   };
+}
+
+async function readVersion(req: IncomingMessage): Promise<string> {
+  const { version } = await readJsonObject(req);
+  if (typeof version !== 'string' || version === '') throw new HttpError(400, 'version 必須是非空字串');
+  return version;
 }
 
 async function readJsonObject(req: IncomingMessage): Promise<Record<string, unknown>> {

@@ -59,7 +59,10 @@
       legend { font-weight: 600; margin-bottom: 8px; color: var(--muted); font-size: 13px; }
       .field { display: grid; grid-template-columns: 200px 1fr; gap: 12px; align-items: center; margin-bottom: 12px; }
       label { font-size: 14px; }
-      input, select {
+      .field.stacked { grid-template-columns: 1fr; gap: 6px; }
+      .label-row { display: flex; justify-content: space-between; align-items: center; }
+      .hint { font-size: 13px; }
+      input, select, textarea {
         width: 100%;
         padding: 7px 10px;
         border: 1px solid var(--border);
@@ -68,7 +71,8 @@
         color: var(--text);
         font: 14px ui-monospace, "Cascadia Code", Consolas, monospace;
       }
-      input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+      textarea { resize: vertical; line-height: 1.5; }
+      input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
       .actions { display: flex; gap: 12px; align-items: center; margin-top: 8px; }
       button {
         padding: 8px 20px;
@@ -81,6 +85,8 @@
         cursor: pointer;
       }
       button:disabled { opacity: 0.6; cursor: wait; }
+      button.small { padding: 4px 14px; font-size: 13px; }
+      button.secondary { background: transparent; color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
       .message.error { color: var(--error); }
       .section-header { display: flex; flex-wrap: wrap; gap: 8px 12px; justify-content: space-between; align-items: baseline; }
       .inline-form { display: flex; gap: 8px; align-items: center; font-size: 14px; }
@@ -92,7 +98,7 @@
       .release summary { display: flex; gap: 12px; align-items: center; cursor: pointer; list-style: none; }
       .release summary::before { content: '▸'; color: var(--muted); }
       .release[open] summary::before { content: '▾'; }
-      .release summary button { margin-left: auto; padding: 4px 14px; font-size: 13px; }
+      .release summary .count { margin-right: auto; }
       .release p { margin: 8px 0; }
       .release ul { margin: 0 0 8px; padding-left: 20px; font-size: 14px; }
       .tag { display: inline-block; min-width: 72px; color: var(--muted); font: 12px ui-monospace, Consolas, monospace; }
@@ -200,6 +206,17 @@
               <input id="linkUrl" name="linkUrl" />
             </div>
           </fieldset>
+          <fieldset>
+            <legend>翻譯</legend>
+            <div class="field stacked">
+              <div class="label-row">
+                <label for="translationPrompt">翻譯 prompt</label>
+                <button type="button" id="restore-prompt" class="small secondary">還原預設</button>
+              </div>
+              <textarea id="translationPrompt" name="translationPrompt" rows="12"></textarea>
+              <span class="muted hint">只需要寫翻譯的要求. JSON 格式的規則固定在程式中. 儲存後, 新的翻譯和「重新翻譯」都會使用這個 prompt.</span>
+            </div>
+          </fieldset>
           <div class="actions">
             <button type="submit">儲存</button>
             <span id="message" class="message muted"></span>
@@ -273,17 +290,12 @@
           const item = Object.assign(document.createElement('details'), { className: 'release', open: opened.has(release.version) });
           item.dataset.version = release.version;
 
-          const button = Object.assign(document.createElement('button'), { type: 'button', textContent: '送出通知' });
-          button.addEventListener('click', (event) => {
-            // 按鈕在 summary 裡面, 不讓點擊同時展開或收合.
-            event.preventDefault();
-            notifyRelease(release.version, button);
-          });
           const summary = document.createElement('summary');
           summary.append(
             Object.assign(document.createElement('strong'), { textContent: `v${release.version}` }),
-            Object.assign(document.createElement('span'), { className: 'muted', textContent: `${release.entries.length} 條` }),
-            button,
+            Object.assign(document.createElement('span'), { className: 'muted count', textContent: `${release.entries.length} 條` }),
+            summaryButton('重新翻譯', 'small secondary', (button) => retranslateRelease(release.version, button)),
+            summaryButton('送出通知', 'small', (button) => notifyRelease(release.version, button)),
           );
 
           const entries = release.entries.map((entry) => {
@@ -302,8 +314,33 @@
         container.replaceChildren(...items);
       }
 
+      function summaryButton(text, className, onClick) {
+        const button = Object.assign(document.createElement('button'), { type: 'button', className, textContent: text });
+        button.addEventListener('click', (event) => {
+          // 按鈕在 summary 裡面, 不讓點擊同時展開或收合.
+          event.preventDefault();
+          onClick(button);
+        });
+        return button;
+      }
+
       async function loadReleases() {
         renderReleases(await api('/api/releases'));
+      }
+
+      async function retranslateRelease(version, button) {
+        button.disabled = true;
+        showMessage(releasesMessage, `重新翻譯 v${version} 中...`);
+        try {
+          await apiJson('POST', '/api/releases/retranslate', { version });
+          showMessage(releasesMessage, `已重新翻譯 v${version}`);
+          await loadReleases();
+        } catch (error) {
+          showMessage(releasesMessage, `重新翻譯 v${version} 失敗: ${error.message}`, true);
+        } finally {
+          button.disabled = false;
+          refresh();
+        }
       }
 
       async function notifyRelease(version, button) {
@@ -355,9 +392,20 @@
         }
       }
 
+      // 只填入表單, 按「儲存」後才生效.
+      document.querySelector('#restore-prompt').addEventListener('click', async () => {
+        try {
+          const defaults = await api('/api/settings/defaults');
+          form.elements.namedItem('translationPrompt').value = defaults.translationPrompt;
+          showMessage(message, '已填入預設 prompt, 按「儲存」後生效');
+        } catch (error) {
+          showMessage(message, `讀取預設 prompt 失敗: ${error.message}`, true);
+        }
+      });
+
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
-        const button = form.querySelector('button');
+        const button = form.querySelector('button[type="submit"]');
         button.disabled = true;
         showMessage(message, '儲存中...');
         try {

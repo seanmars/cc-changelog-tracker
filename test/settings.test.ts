@@ -40,6 +40,22 @@ test('merge 只取已知的字串欄位並去掉空白', () => {
   assert.equal('unknown' in merged, false);
 });
 
+test('merge 把 CRLF 換行統一成 LF', () => {
+  const crlf = DEFAULT_SETTINGS.translationPrompt.replace(/\n/g, '\r\n');
+  assert.equal(mergeSettings(DEFAULT_SETTINGS, { translationPrompt: crlf }).translationPrompt, DEFAULT_SETTINGS.translationPrompt);
+});
+
+test('和預設值相同的設定不存進 DB', () => {
+  const db = new DatabaseSync(':memory:');
+  const store = openSettingsStore(db);
+  const storedKeys = () => (db.prepare('SELECT key FROM settings ORDER BY key').all() as { key: string }[]).map((r) => r.key);
+  store.save({ ...COMPLETE, translationPrompt: '自訂 prompt' });
+  assert.deepEqual(storedKeys(), ['claudeKey', 'discordWebhookUrl', 'geminiApiKey', 'translationPrompt']);
+  // 還原成預設值後, 該設定從 DB 刪除, 之後會跟著程式的預設值.
+  store.save(COMPLETE);
+  assert.deepEqual(storedKeys(), ['claudeKey', 'discordWebhookUrl', 'geminiApiKey']);
+});
+
 test('沒有資料時回傳預設值, 保存後可以讀回', () => {
   const store = openSettingsStore(new DatabaseSync(':memory:'));
   assert.deepEqual(store.load(), DEFAULT_SETTINGS);

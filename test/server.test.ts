@@ -6,6 +6,7 @@ import { openLogStore } from '../src/logs.ts';
 import { openReleaseStore } from '../src/releases.ts';
 import { createAdminServer } from '../src/server.ts';
 import { openSettingsStore } from '../src/settings.ts';
+import { DEFAULT_TRANSLATION_PROMPT } from '../src/translator.ts';
 
 const db = new DatabaseSync(':memory:');
 const settings = openSettingsStore(db);
@@ -15,6 +16,7 @@ let wakeCount = 0;
 let fetching = false;
 const fetchCounts: number[] = [];
 const notifiedVersions: string[] = [];
+const retranslatedVersions: string[] = [];
 const server = createAdminServer({
   settings,
   logs,
@@ -32,6 +34,9 @@ const server = createAdminServer({
   isFetching: () => fetching,
   notifyVersion: async (version) => {
     notifiedVersions.push(version);
+  },
+  retranslate: async (version) => {
+    retranslatedVersions.push(version);
   },
 });
 let baseUrl = '';
@@ -109,7 +114,7 @@ test('不是 application/json 的寫入請求回傳 415', async () => {
 });
 
 test('GET /api/releases 回傳 DB 中的版本', async () => {
-  releases.put({ version: '2.1.3', summary: '摘要', entries: [] });
+  releases.put({ version: '2.1.3', summary: '摘要', entries: [] }, { version: '2.1.3', summary: 'Summary', entries: [] });
   const list = await (await fetch(`${baseUrl}/api/releases`)).json();
   assert.deepEqual(
     list.map((r: { version: string }) => r.version),
@@ -134,6 +139,18 @@ test('POST /api/releases/notify 送出指定版本', async () => {
   const res = await post('/api/releases/notify', { version: '2.1.3' });
   assert.equal(res.status, 200);
   assert.deepEqual(notifiedVersions, ['2.1.3']);
+});
+
+test('POST /api/releases/retranslate 重新翻譯指定版本', async () => {
+  assert.equal((await post('/api/releases/retranslate', { version: '' })).status, 400);
+  const res = await post('/api/releases/retranslate', { version: '2.1.3' });
+  assert.equal(res.status, 200);
+  assert.deepEqual(retranslatedVersions, ['2.1.3']);
+});
+
+test('GET /api/settings/defaults 回傳預設設定', async () => {
+  const defaults = await (await fetch(`${baseUrl}/api/settings/defaults`)).json();
+  assert.equal(defaults.translationPrompt, DEFAULT_TRANSLATION_PROMPT);
 });
 
 test('未知路徑回傳 404', async () => {

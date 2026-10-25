@@ -5,15 +5,18 @@ import type { ClassifiedRelease } from './categories.ts';
 const CHUNK_SIZE = 20;
 const MAX_ATTEMPTS = 2;
 
-const INSTRUCTIONS = `把下方 JSON 中每個 key 的內容翻譯成台灣正體中文. 內容是 Claude Code CHANGELOG 的摘要和條目.
+// 後台可以修改翻譯 prompt, 這是預設值, 後台的「還原預設」會還原成這段.
+export const DEFAULT_TRANSLATION_PROMPT = `把內容翻譯成台灣正體中文. 內容是 Claude Code CHANGELOG 的摘要和條目.
 
 規則:
 - 使用台灣正體中文 (繁體字), 禁止使用簡體字. 例如: 設定 (不是设定), 檔案 (不是档案), 執行 (不是执行).
 - 使用台灣用語, 禁止使用中國用語. 例如: 檔案 (不是文件), 程式 (不是程序), 設定 (不是設置), 預設 (不是默認), 伺服器 (不是服務器), 資料 (不是數據).
 - 技術詞彙, 產品名稱, 指令, 設定名稱, 反引號內的內容保留英文原文.
 - 開頭的方括號標籤 (例如 [VSCode]) 保留原樣.
-- 使用半形標點符號.
-- key 保持不變. 輸出必須包含輸入的每一個 key, 不能合併或拆開內容.`;
+- 使用半形標點符號.`;
+
+// 格式規則和分段, schema 綁在一起, 所以固定在程式中, 不開放後台修改.
+const FORMAT_RULES = `輸入是下方的 JSON object. 翻譯每個 key 的內容. key 保持不變, 輸出必須包含輸入的每一個 key, 不能合併或拆開內容.`;
 
 // 用編號當 key, 理由和 classifier 相同: 用 array 時數量錯一個, 後面的翻譯全部錯位.
 function buildSchema(count: number) {
@@ -25,13 +28,13 @@ function buildSchema(count: number) {
   };
 }
 
-export function createTranslator(apiKey: string, model: string) {
+export function createTranslator(apiKey: string, model: string, prompt: string) {
   const client = new GoogleGenAI({ apiKey });
 
   // 照抄的結果符合 schema, 所以要另外檢查. 只重送沒翻譯的那一段.
   async function translateChunk(texts: string[], hasSummary: boolean): Promise<string[]> {
     const source = Object.fromEntries(texts.map((text, i) => [String(i + 1), text]));
-    const input = `${INSTRUCTIONS}\n\n${JSON.stringify(source, null, 2)}`;
+    const input = `${prompt}\n\n${FORMAT_RULES}\n\n${JSON.stringify(source, null, 2)}`;
     for (let attempt = 1; ; attempt++) {
       const interaction = await client.interactions.create({
         model,

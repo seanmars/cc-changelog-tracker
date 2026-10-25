@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import type { ClassifiedRelease } from '../src/categories.ts';
 import type { FetchResult } from '../src/fetcher.ts';
 import type { State } from '../src/state.ts';
-import { checkOnce, fetchRecent, notifyLatest, notifyVersion, type TrackerDeps } from '../src/tracker.ts';
+import { checkOnce, fetchRecent, notifyLatest, notifyVersion, retranslate, type TrackerDeps } from '../src/tracker.ts';
 
 const CHANGELOG = `# Changelog
 
@@ -20,11 +20,19 @@ const CHANGELOG = `# Changelog
 - Added A
 `;
 
-function createDeps(initial: State, fetchResult: FetchResult, failOn?: string, existing: ClassifiedRelease[] = []) {
+function createDeps(
+  initial: State,
+  fetchResult: FetchResult,
+  failOn?: string,
+  existing: ClassifiedRelease[] = [],
+  existingSources: ClassifiedRelease[] = [],
+) {
   const saved: State[] = [];
   const stored: string[] = [];
   const notified: string[] = [];
+  const classified: string[] = [];
   const releases = new Map(existing.map((r) => [r.version, r]));
+  const sources = new Map(existingSources.map((r) => [r.version, r]));
   let state = initial;
   const deps: TrackerDeps = {
     fetchChangelog: async () => fetchResult,
@@ -33,15 +41,16 @@ function createDeps(initial: State, fetchResult: FetchResult, failOn?: string, e
       state = s;
       saved.push(s);
     },
-    classify: async (r) => ({
-      version: r.version,
-      summary: '',
-      entries: r.entries.map((text) => ({ text, category: 'other' })),
-    }),
-    translate: async (r) => r,
+    classify: async (r) => {
+      classified.push(r.version);
+      return { version: r.version, summary: `Summary ${r.version}`, entries: r.entries.map((text) => ({ text, category: 'other' })) };
+    },
+    translate: async (r) => ({ ...r, summary: `${r.summary} (譯)` }),
     find: async (version) => releases.get(version),
-    save: async (r) => {
+    findSource: async (version) => sources.get(version),
+    save: async (r, source) => {
       releases.set(r.version, r);
+      sources.set(source.version, source);
       stored.push(r.version);
     },
     notify: async (r) => {
@@ -50,7 +59,7 @@ function createDeps(initial: State, fetchResult: FetchResult, failOn?: string, e
     },
     log: () => {},
   };
-  return { deps, saved, stored, notified };
+  return { deps, saved, stored, notified, classified, releases, sources };
 }
 
 const OK: FetchResult = { status: 'ok', body: CHANGELOG, etag: 'new-etag' };
@@ -122,4 +131,34 @@ test('notifyVersion 在 DB 沒有時先翻譯, 找不到版本時拋出錯誤', 
   assert.deepEqual(stored, ['2.1.1']);
   assert.deepEqual(notified, ['2.1.1']);
   await assert.rejects(notifyVersion(deps, '9.9.9'), /找不到版本 9\.9\.9/);
+});
+
+test('翻譯時一併保存分類後的原文', async () => {
+  const { deps, sources, releases } = createDeps({ lastVersion: '2.1.3', etag: 'old' }, OK);
+  await fetchRecent(deps, 1);
+  assert.equal(sources.get('2.1.3')?.summary, 'Summary 2.1.3');
+  assert.equal(releases.get('2.1.3')?.summary, 'Summary 2.1.3 (譯)');
+});
+
+test('retranslate 有原文時只重新翻譯, 不重新分類也不通知', async () => {
+  const source: ClassifiedRelease = { version: '2.1.3', summary: 'English', entries: [{ text: 'Fixed C', category: 'fixed' }] };
+  const { deps, classified, notified, releases } = createDeps(
+    { lastVersion: '2.1.3', etag: 'old' },
+    OK,
+    undefined,
+    [STORED_213],
+    [source],
+  );
+  await retranslate(deps, '2.1.3');
+  assert.deepEqual(classified, []);
+  assert.deepEqual(notified, []);
+  assert.equal(releases.get('2.1.3')?.summary, 'English (譯)');
+  assert.deepEqual(releases.get('2.1.3')?.entries, source.entries);
+});
+
+test('retranslate 沒有原文時重新下載並分類', async () => {
+  const { deps, classified, sources } = createDeps({ lastVersion: '2.1.3', etag: 'old' }, OK, undefined, [STORED_213]);
+  await retranslate(deps, '2.1.3');
+  assert.deepEqual(classified, ['2.1.3']);
+  assert.equal(sources.get('2.1.3')?.summary, 'Summary 2.1.3');
 });
