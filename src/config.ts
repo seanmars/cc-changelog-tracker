@@ -5,6 +5,7 @@ export interface Config {
   linkUrl: string;
   checkIntervalMinutes: number;
   statePath: string;
+  dbPath: string;
   discordWebhookUrl: string;
   geminiApiKey: string;
   geminiModel: string;
@@ -25,6 +26,7 @@ export function loadConfig(): Config {
     linkUrl: process.env.LINK_URL ?? 'https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md',
     checkIntervalMinutes,
     statePath: process.env.STATE_PATH ?? 'data/state.json',
+    dbPath: process.env.DB_PATH ?? 'data/tracker.db',
     discordWebhookUrl: required('DISCORD_WEBHOOK_URL'),
     geminiApiKey: required('GEMINI_API_KEY'),
     geminiModel: process.env.GEMINI_MODEL ?? 'gemini-3.5-flash-lite',

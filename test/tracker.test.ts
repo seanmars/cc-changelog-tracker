@@ -21,6 +21,7 @@ const CHANGELOG = `# Changelog
 
 function createDeps(initial: State, fetchResult: FetchResult, failOn?: string) {
   const saved: State[] = [];
+  const stored: string[] = [];
   const notified: string[] = [];
   let state = initial;
   const deps: TrackerDeps = {
@@ -36,13 +37,16 @@ function createDeps(initial: State, fetchResult: FetchResult, failOn?: string) {
       entries: r.entries.map((text) => ({ text, category: 'other' })),
     }),
     translate: async (r) => r,
+    save: async (r) => {
+      stored.push(r.version);
+    },
     notify: async (r) => {
       if (r.version === failOn) throw new Error('notify failed');
       notified.push(r.version);
     },
     log: () => {},
   };
-  return { deps, saved, notified };
+  return { deps, saved, stored, notified };
 }
 
 const OK: FetchResult = { status: 'ok', body: CHANGELOG, etag: 'new-etag' };
@@ -61,16 +65,19 @@ test('304 時不做任何事', async () => {
   assert.deepEqual(saved, []);
 });
 
-test('依序通知新版本, 最後更新 ETag', async () => {
-  const { deps, saved, notified } = createDeps({ lastVersion: '2.1.1', etag: 'old' }, OK);
+test('依序儲存並通知新版本, 最後更新 ETag', async () => {
+  const { deps, saved, stored, notified } = createDeps({ lastVersion: '2.1.1', etag: 'old' }, OK);
   await checkOnce(deps);
+  assert.deepEqual(stored, ['2.1.2', '2.1.3']);
   assert.deepEqual(notified, ['2.1.2', '2.1.3']);
   assert.deepEqual(saved.at(-1), { lastVersion: '2.1.3', etag: 'new-etag' });
 });
 
 test('中途失敗時保留進度和舊 ETag, 下次從失敗的版本繼續', async () => {
-  const { deps, saved, notified } = createDeps({ lastVersion: '2.1.1', etag: 'old' }, OK, '2.1.3');
+  const { deps, saved, stored, notified } = createDeps({ lastVersion: '2.1.1', etag: 'old' }, OK, '2.1.3');
   await assert.rejects(checkOnce(deps), /notify failed/);
+  // 通知失敗前已經存好, 下次重跑會覆寫同一個 key.
+  assert.deepEqual(stored, ['2.1.2', '2.1.3']);
   assert.deepEqual(notified, ['2.1.2']);
   assert.deepEqual(saved.at(-1), { lastVersion: '2.1.2', etag: 'old' });
 });

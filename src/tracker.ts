@@ -9,6 +9,7 @@ export interface TrackerDeps {
   saveState(state: State): Promise<void>;
   classify(release: Release): Promise<ClassifiedRelease>;
   translate(release: ClassifiedRelease): Promise<ClassifiedRelease>;
+  save(release: ClassifiedRelease): Promise<void>;
   notify(release: ClassifiedRelease): Promise<void>;
   log(message: string): void;
 }
@@ -16,6 +17,8 @@ export interface TrackerDeps {
 export async function processRelease(deps: TrackerDeps, release: Release): Promise<void> {
   const classified = await deps.classify(release);
   const translated = await deps.translate(classified);
+  // 先存再通知, Discord 失敗時翻譯結果也不會遺失.
+  await deps.save(translated);
   await deps.notify(translated);
 }
 

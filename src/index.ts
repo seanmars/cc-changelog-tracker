@@ -5,6 +5,8 @@ import { loadConfig } from './config.ts';
 import { buildMessages, sendMessage } from './discord.ts';
 import { fetchChangelog } from './fetcher.ts';
 import { loadState, saveState } from './state.ts';
+import { openDatabase } from './db.ts';
+import { openReleaseStore } from './store.ts';
 import { checkOnce, processRelease, type TrackerDeps } from './tracker.ts';
 import { createTranslator } from './translator.ts';
 
@@ -13,12 +15,15 @@ function log(message: string): void {
 }
 
 const config = loadConfig();
+const db = openDatabase(config.dbPath);
+const store = openReleaseStore(db);
 const deps: TrackerDeps = {
   fetchChangelog: (etag) => fetchChangelog(config.changelogUrl, etag),
   loadState: () => loadState(config.statePath),
   saveState: (state) => saveState(config.statePath, state),
   classify: createClassifier(config.claudeModel),
   translate: createTranslator(config.geminiApiKey, config.geminiModel),
+  save: async (release) => store.put(release),
   notify: async (release) => {
     for (const message of buildMessages(release, config.linkUrl)) {
       await sendMessage(config.discordWebhookUrl, message);
