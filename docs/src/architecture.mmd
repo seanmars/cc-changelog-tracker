@@ -1,9 +1,14 @@
 flowchart LR
-  env[(".env")]
+  env[(".env<br/>選填")]
+  browser["瀏覽器"]
 
   subgraph app["cc-changelog-tracker (Node.js 24)"]
-    config["config.ts<br/>讀取設定"]
-    index["index.ts<br/>主迴圈 / CLI 參數"]
+    config["config.ts<br/>DB_PATH / PORT / HOST"]
+    index["index.ts<br/>組裝 / CLI 參數"]
+    server["server.ts<br/>後台頁面 + API"]
+    scheduler["scheduler.ts<br/>計時 / 等待設定"]
+    settings["settings.ts<br/>驗證與保存設定"]
+    logs["logs.ts<br/>保存 log"]
     tracker["tracker.ts<br/>checkOnce / processRelease"]
     fetcher["fetcher.ts<br/>ETag 條件式下載"]
     changelog["changelog.ts<br/>解析與比較版本"]
@@ -16,8 +21,8 @@ flowchart LR
 
   subgraph ext["外部服務"]
     github["GitHub raw<br/>CHANGELOG.md"]
-    claude["Claude Code CLI<br/>claude-sonnet-5-5"]
-    gemini["Gemini API<br/>gemini-3.5-flash-lite"]
+    claude["Claude Code CLI"]
+    gemini["Gemini API"]
     webhook["Discord webhook"]
   end
 
@@ -27,7 +32,14 @@ flowchart LR
 
   env --> config
   config --> index
-  index --> tracker
+  index --> server
+  index --> scheduler
+  browser -->|"HTTP"| server
+  server --> settings
+  server --> logs
+  server -->|"存檔後 wake"| scheduler
+  scheduler --> settings
+  scheduler --> tracker
   tracker --> fetcher
   tracker --> changelog
   tracker --> classifier
@@ -39,5 +51,7 @@ flowchart LR
   classifier -->|"Agent SDK 子程序"| claude
   translator -->|"interactions.create"| gemini
   discord -->|"HTTP POST"| webhook
+  settings -->|"settings 表"| dbfile
+  logs -->|"logs 表"| dbfile
   state -->|"state 表"| dbfile
   store -->|"releases 表"| dbfile

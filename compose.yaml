@@ -3,7 +3,13 @@ services:
     build: .
     image: cc-changelog-tracker
     restart: unless-stopped
-    env_file: .env
+    # tracking 設定都在後台. .env 只用來覆寫 DB_PATH 等啟動設定, 沒有這個檔案也能啟動.
+    env_file:
+      - path: .env
+        required: false
+    # 後台沒有密碼, 不要對外網開放這個 port.
+    ports:
+      - "3000:3000"
     # Agent SDK 會啟動 Claude Code 子程序. 用 init 回收結束的子程序, 並轉送停止訊號.
     init: true
     volumes:

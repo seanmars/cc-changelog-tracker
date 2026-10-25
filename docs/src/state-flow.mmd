@@ -1,4 +1,6 @@
 stateDiagram-v2
+  state "讀取後台設定" as LoadSettings
+  state "等待後台存檔<br/>不啟動計時器" as Paused
   state "等待計時器" as Idle
   state "讀取 state 表" as Load
   state "下載 CHANGELOG<br/>帶 If-None-Match" as Fetch
@@ -13,8 +15,11 @@ stateDiagram-v2
   state "保存新 ETag" as SaveEtag
   state "記錄錯誤" as Failed
 
-  [*] --> Idle : 啟動
-  Idle --> Load : 時間到
+  [*] --> LoadSettings : 啟動
+  LoadSettings --> Paused : 設定未完成
+  Paused --> LoadSettings : 後台存檔
+  LoadSettings --> Load : 設定完整
+  Idle --> LoadSettings : 時間到 / 後台存檔
   Load --> Fetch
   Fetch --> Idle : 304 沒有變化
   Fetch --> Parse : 200
@@ -37,3 +42,4 @@ stateDiagram-v2
   Notify --> Failed : 失敗
   Failed --> Idle : 下次重試
   Idle --> [*] : SIGINT / SIGTERM
+  Paused --> [*] : SIGINT / SIGTERM

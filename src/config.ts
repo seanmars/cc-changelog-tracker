@@ -1,42 +1,27 @@
 import { existsSync } from 'node:fs';
 
-export interface Config {
-  changelogUrl: string;
-  linkUrl: string;
-  checkIntervalMinutes: number;
+// 啟動 server 前就需要的設定. 其他設定都在後台管理, 存在 SQLite.
+export interface ServerConfig {
   dbPath: string;
   legacyStatePath: string;
-  discordWebhookUrl: string;
-  geminiApiKey: string;
-  geminiModel: string;
-  claudeModel: string;
+  host: string;
+  port: number;
 }
 
-export function loadConfig(): Config {
+export function loadServerConfig(): ServerConfig {
   if (existsSync('.env')) process.loadEnvFile('.env');
 
-  const checkIntervalMinutes = Number(process.env.CHECK_INTERVAL_MINUTES ?? '10');
-  if (!Number.isFinite(checkIntervalMinutes) || checkIntervalMinutes <= 0) {
-    throw new Error('CHECK_INTERVAL_MINUTES 必須是正數');
+  const port = Number(process.env.PORT ?? '3000');
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    throw new Error('PORT 必須是 0 到 65535 的整數');
   }
 
   return {
-    changelogUrl:
-      process.env.CHANGELOG_URL ?? 'https://raw.githubusercontent.com/anthropics/claude-code/refs/heads/main/CHANGELOG.md',
-    linkUrl: process.env.LINK_URL ?? 'https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md',
-    checkIntervalMinutes,
     dbPath: process.env.DB_PATH ?? 'data/tracker.db',
     // 舊版的 state.json 位置, 只在啟動時匯入一次.
     legacyStatePath: process.env.STATE_PATH ?? 'data/state.json',
-    discordWebhookUrl: required('DISCORD_WEBHOOK_URL'),
-    geminiApiKey: required('GEMINI_API_KEY'),
-    geminiModel: process.env.GEMINI_MODEL ?? 'gemini-3.5-flash-lite',
-    claudeModel: process.env.CLAUDE_MODEL ?? 'claude-sonnet-5-5',
+    // 後台沒有密碼, 預設只接受本機連線. Docker image 中改為 0.0.0.0.
+    host: process.env.HOST ?? '127.0.0.1',
+    port,
   };
-}
-
-function required(name: string): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`缺少環境變數 ${name}`);
-  return value;
 }

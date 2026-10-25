@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>cc-changelog-tracker 後台</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --accent: #d97757;
+        --bg: #f6f5f2;
+        --card: #ffffff;
+        --text: #1f1e1c;
+        --muted: #6b6862;
+        --border: #e3e0da;
+        --ok: #2f7d4f;
+        --warn: #b26a00;
+        --error: #c0392b;
+        --error-bg: #fdf0ee;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #1b1a18;
+          --card: #252421;
+          --text: #ecebe8;
+          --muted: #a09c94;
+          --border: #3a3834;
+          --ok: #5cbf86;
+          --warn: #e0a040;
+          --error: #ef7a6c;
+          --error-bg: #3a2522;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 15px/1.6 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif;
+      }
+      main { max-width: 960px; margin: 0 auto; padding: 32px 20px 64px; }
+      h1 { margin: 0 0 24px; font-size: 22px; }
+      h1 span { color: var(--accent); }
+      h2 { margin: 0 0 16px; font-size: 17px; }
+      section {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+      }
+      .status { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; }
+      .badge { font-weight: 600; padding: 2px 10px; border-radius: 999px; border: 1px solid currentColor; }
+      .badge.ok { color: var(--ok); }
+      .badge.paused { color: var(--warn); }
+      .muted { color: var(--muted); }
+      .problems { margin: 12px 0 0; padding-left: 20px; color: var(--warn); }
+      fieldset { border: 0; margin: 0 0 8px; padding: 0; }
+      legend { font-weight: 600; margin-bottom: 8px; color: var(--muted); font-size: 13px; }
+      .field { display: grid; grid-template-columns: 200px 1fr; gap: 12px; align-items: center; margin-bottom: 12px; }
+      label { font-size: 14px; }
+      input, select {
+        width: 100%;
+        padding: 7px 10px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px ui-monospace, "Cascadia Code", Consolas, monospace;
+      }
+      input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+      .actions { display: flex; gap: 12px; align-items: center; margin-top: 8px; }
+      button {
+        padding: 8px 20px;
+        border: 0;
+        border-radius: 6px;
+        background: var(--accent);
+        color: #fff;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:disabled { opacity: 0.6; cursor: wait; }
+      .message.error { color: var(--error); }
+      .logs-header { display: flex; justify-content: space-between; align-items: baseline; }
+      table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+      th { color: var(--muted); font-weight: 600; }
+      td.time { white-space: nowrap; color: var(--muted); font-family: ui-monospace, Consolas, monospace; }
+      td.message { word-break: break-word; }
+      tr.error td { background: var(--error-bg); }
+      tr.error td.message { color: var(--error); }
+      @media (max-width: 640px) {
+        .field { grid-template-columns: 1fr; gap: 4px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1><span>●</span> cc-changelog-tracker 後台</h1>
+
+      <section>
+        <h2>狀態</h2>
+        <div class="status">
+          <span id="badge" class="badge">載入中</span>
+          <span class="muted">最後處理的版本: <strong id="last-version">-</strong></span>
+        </div>
+        <ul id="problems" class="problems" hidden></ul>
+      </section>
+
+      <section>
+        <h2>設定</h2>
+        <form id="settings" autocomplete="off">
+          <fieldset>
+            <legend>通知與金鑰</legend>
+            <div class="field">
+              <label for="discordWebhookUrl">Discord webhook URL</label>
+              <input id="discordWebhookUrl" name="discordWebhookUrl" placeholder="https://discord.com/api/webhooks/..." />
+            </div>
+            <div class="field">
+              <label for="geminiApiKey">Gemini API key</label>
+              <input id="geminiApiKey" name="geminiApiKey" />
+            </div>
+            <div class="field">
+              <label for="claudeAuthType">Claude 認證方式</label>
+              <select id="claudeAuthType" name="claudeAuthType">
+                <option value="oauth-token">OAuth token (claude setup-token)</option>
+                <option value="api-key">Anthropic API key</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="claudeKey">Claude key</label>
+              <input id="claudeKey" name="claudeKey" />
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>進階</legend>
+            <div class="field">
+              <label for="checkIntervalMinutes">檢查間隔 (分鐘)</label>
+              <input id="checkIntervalMinutes" name="checkIntervalMinutes" inputmode="decimal" />
+            </div>
+            <div class="field">
+              <label for="geminiModel">Gemini model</label>
+              <input id="geminiModel" name="geminiModel" />
+            </div>
+            <div class="field">
+              <label for="claudeModel">Claude model</label>
+              <input id="claudeModel" name="claudeModel" />
+            </div>
+            <div class="field">
+              <label for="changelogUrl">CHANGELOG 下載 URL</label>
+              <input id="changelogUrl" name="changelogUrl" />
+            </div>
+            <div class="field">
+              <label for="linkUrl">通知中的 CHANGELOG 連結</label>
+              <input id="linkUrl" name="linkUrl" />
+            </div>
+          </fieldset>
+          <div class="actions">
+            <button type="submit">儲存</button>
+            <span id="message" class="message muted"></span>
+          </div>
+        </form>
+      </section>
+
+      <section>
+        <div class="logs-header">
+          <h2>Logs</h2>
+          <span class="muted">每 5 秒自動更新</span>
+        </div>
+        <table>
+          <thead>
+            <tr><th>時間</th><th>內容</th></tr>
+          </thead>
+          <tbody id="logs"></tbody>
+        </table>
+      </section>
+    </main>
+
+    <script type="module">
+      const form = document.querySelector('#settings');
+      const message = document.querySelector('#message');
+
+      async function api(path, options) {
+        const res = await fetch(path, options);
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+        return body;
+      }
+
+      function renderStatus(status) {
+        const badge = document.querySelector('#badge');
+        badge.textContent = status.ready ? 'Tracking 中' : '已暫停: 設定未完成';
+        badge.className = `badge ${status.ready ? 'ok' : 'paused'}`;
+        document.querySelector('#last-version').textContent = status.lastVersion ?? '尚未初始化';
+
+        const problems = document.querySelector('#problems');
+        problems.replaceChildren(
+          ...status.problems.map((text) => Object.assign(document.createElement('li'), { textContent: text })),
+        );
+        problems.hidden = status.problems.length === 0;
+      }
+
+      // log 內容可能包含外部服務的錯誤訊息, 一律用 textContent, 不用 innerHTML.
+      function renderLogs(entries) {
+        const rows = entries.map((entry) => {
+          const row = document.createElement('tr');
+          row.className = entry.level;
+          const time = Object.assign(document.createElement('td'), {
+            className: 'time',
+            textContent: new Date(entry.time).toLocaleString('zh-TW', { hour12: false }),
+          });
+          const text = Object.assign(document.createElement('td'), { className: 'message', textContent: entry.message });
+          row.append(time, text);
+          return row;
+        });
+        document.querySelector('#logs').replaceChildren(...rows);
+      }
+
+      async function refresh() {
+        try {
+          const [status, logs] = await Promise.all([api('/api/status'), api('/api/logs')]);
+          renderStatus(status);
+          renderLogs(logs);
+        } catch (error) {
+          document.querySelector('#badge').textContent = `無法連線: ${error.message}`;
+        }
+      }
+
+      async function loadSettings() {
+        const settings = await api('/api/settings');
+        for (const [key, value] of Object.entries(settings)) {
+          const input = form.elements.namedItem(key);
+          if (input) input.value = value;
+        }
+      }
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const button = form.querySelector('button');
+        button.disabled = true;
+        message.className = 'message muted';
+        message.textContent = '儲存中...';
+        try {
+          const status = await api('/api/settings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(Object.fromEntries(new FormData(form))),
+          });
+          renderStatus(status);
+          message.textContent = status.ready ? '已儲存, 開始 tracking' : '已儲存, 但設定還沒完成';
+          await loadSettings();
+          setTimeout(refresh, 1000);
+        } catch (error) {
+          message.className = 'message error';
+          message.textContent = `儲存失敗: ${error.message}`;
+        } finally {
+          button.disabled = false;
+        }
+      });
+
+      await Promise.all([loadSettings(), refresh()]);
+      setInterval(refresh, 5000);
+    </script>
+  </body>
+</html>

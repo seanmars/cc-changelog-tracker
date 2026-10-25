@@ -10,6 +10,8 @@ RUN pnpm install --frozen-lockfile --prod
 
 FROM node:24-bookworm-slim
 ENV NODE_ENV=production
+# container 內要 listen 0.0.0.0, 才能透過 port mapping 連到後台.
+ENV HOST=0.0.0.0
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./
@@ -17,4 +19,5 @@ COPY src ./src
 RUN mkdir -p data && chown node:node data
 USER node
 VOLUME ["/app/data"]
+EXPOSE 3000
 CMD ["node", "src/index.ts"]

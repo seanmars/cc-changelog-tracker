@@ -2,6 +2,12 @@ import { tmpdir } from 'node:os';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { CATEGORIES, type Category, type ClassifiedRelease } from './categories.ts';
 import type { Release } from './changelog.ts';
+import type { ClaudeAuth, ClaudeAuthType } from './settings.ts';
+
+const AUTH_ENV: Record<ClaudeAuthType, string> = {
+  'oauth-token': 'CLAUDE_CODE_OAUTH_TOKEN',
+  'api-key': 'ANTHROPIC_API_KEY',
+};
 
 const SYSTEM_PROMPT = `You classify entries of the Claude Code changelog.
 
@@ -26,7 +32,8 @@ const OUTPUT_SCHEMA = {
   additionalProperties: false,
 };
 
-export function createClassifier(model: string) {
+export function createClassifier(model: string, auth: ClaudeAuth) {
+  const env = buildEnv(auth);
   return async (release: Release): Promise<ClassifiedRelease> => {
     const numbered = release.entries.map((entry, i) => `${i + 1}. ${entry}`).join('\n');
     const prompt = `Version ${release.version}\n\nEntries:\n${numbered}\n\nReturn exactly ${release.entries.length} categories, one per entry, in the same order.`;
@@ -45,6 +52,7 @@ export function createClassifier(model: string) {
         persistSession: false,
         maxTurns: 5,
         cwd: tmpdir(),
+        env,
       },
     })) {
       if (message.type === 'result') {
@@ -62,6 +70,14 @@ export function createClassifier(model: string) {
       entries: release.entries.map((text, i) => ({ text, category: categories[i] })),
     };
   };
+}
+
+// SDK 的 env 會整個取代子程序的環境變數. 移除原有的 Claude 認證, 只使用後台設定的 key.
+function buildEnv(auth: ClaudeAuth): Record<string, string | undefined> {
+  const env = { ...process.env };
+  for (const name of Object.values(AUTH_ENV)) delete env[name];
+  env[AUTH_ENV[auth.type]] = auth.key;
+  return env;
 }
 
 function parseOutput(output: unknown, expectedCount: number): { summary: string; categories: Category[] } {
