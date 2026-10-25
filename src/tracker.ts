@@ -1,5 +1,5 @@
 import type { ClassifiedRelease } from './categories.ts';
-import { findNewReleases, latestRelease, parseChangelog, type Release } from './changelog.ts';
+import { compareVersions, findNewReleases, latestRelease, parseChangelog, type Release } from './changelog.ts';
 import type { FetchResult } from './fetcher.ts';
 import type { State } from './state.ts';
 
@@ -9,16 +9,22 @@ export interface TrackerDeps {
   saveState(state: State): Promise<void>;
   classify(release: Release): Promise<ClassifiedRelease>;
   translate(release: ClassifiedRelease): Promise<ClassifiedRelease>;
+  find(version: string): Promise<ClassifiedRelease | undefined>;
   save(release: ClassifiedRelease): Promise<void>;
   notify(release: ClassifiedRelease): Promise<void>;
   log(message: string): void;
 }
 
-async function processRelease(deps: TrackerDeps, release: Release): Promise<void> {
+async function translateRelease(deps: TrackerDeps, release: Release): Promise<ClassifiedRelease> {
   const classified = await deps.classify(release);
   const translated = await deps.translate(classified);
-  // 先存再通知, Discord 失敗時翻譯結果也不會遺失.
   await deps.save(translated);
+  return translated;
+}
+
+async function processRelease(deps: TrackerDeps, release: Release): Promise<void> {
+  // 先存再通知, Discord 失敗時翻譯結果也不會遺失.
+  const translated = await translateRelease(deps, release);
   await deps.notify(translated);
 }
 
@@ -28,13 +34,44 @@ function parseReleases(markdown: string): Release[] {
   return releases;
 }
 
-// 測試用: 不看 state, 直接通知最新版本.
-export async function notifyLatest(deps: TrackerDeps): Promise<void> {
+// 不帶 ETag 下載完整的 CHANGELOG, 給不依賴 state 的手動操作使用.
+async function fetchAllReleases(deps: TrackerDeps): Promise<Release[]> {
   const result = await deps.fetchChangelog(null);
   if (result.status !== 'ok') throw new Error('無法下載 CHANGELOG');
-  const latest = latestRelease(parseReleases(result.body));
+  return parseReleases(result.body);
+}
+
+// 測試用: 不看 state, 直接通知最新版本.
+export async function notifyLatest(deps: TrackerDeps): Promise<void> {
+  const latest = latestRelease(await fetchAllReleases(deps));
   deps.log(`送出最新版本 ${latest.version} 的通知`);
   await processRelease(deps, latest);
+}
+
+// 抓取最近 count 個版本並存到 DB. 已經存過的版本不重新翻譯. 不送通知, 也不修改 state.
+export async function fetchRecent(deps: TrackerDeps, count: number): Promise<void> {
+  const recent = (await fetchAllReleases(deps))
+    .sort((a, b) => compareVersions(b.version, a.version))
+    .slice(0, count);
+  deps.log(`開始抓取最近 ${recent.length} 個版本`);
+  for (const release of recent) {
+    if (await deps.find(release.version)) continue;
+    deps.log(`翻譯版本 ${release.version} (${release.entries.length} 條)`);
+    await translateRelease(deps, release);
+  }
+  deps.log(`最近 ${recent.length} 個版本抓取完成`);
+}
+
+// 手動送出指定版本的通知. DB 沒有這個版本時, 先分類和翻譯.
+export async function notifyVersion(deps: TrackerDeps, version: string): Promise<void> {
+  let release = await deps.find(version);
+  if (!release) {
+    const source = (await fetchAllReleases(deps)).find((r) => r.version === version);
+    if (!source) throw new Error(`CHANGELOG 中找不到版本 ${version}`);
+    release = await translateRelease(deps, source);
+  }
+  deps.log(`手動送出版本 ${version} 的通知`);
+  await deps.notify(release);
 }
 
 export async function checkOnce(deps: TrackerDeps): Promise<void> {

@@ -22,21 +22,31 @@ Categories:
 Judge each entry by its meaning, not only by its first word.
 Also write a summary: 2 to 4 short English sentences about the changes that matter most to users.`;
 
-const OUTPUT_SCHEMA = {
-  type: 'object',
-  properties: {
-    summary: { type: 'string' },
-    categories: { type: 'array', items: { type: 'string', enum: [...CATEGORIES] } },
-  },
-  required: ['summary', 'categories'],
-  additionalProperties: false,
-};
+// categories 用 entry 編號當 key, 每個編號都是 required. 用 array 時模型可能多給或少給一個,
+// 後面的分類全部錯位. 改用 key 後, SDK 驗證 schema 失敗會讓模型重試, 數量一定正確.
+function buildSchema(entryCount: number) {
+  const keys = Array.from({ length: entryCount }, (_, i) => String(i + 1));
+  return {
+    type: 'object',
+    properties: {
+      summary: { type: 'string' },
+      categories: {
+        type: 'object',
+        properties: Object.fromEntries(keys.map((key) => [key, { type: 'string', enum: [...CATEGORIES] }])),
+        required: keys,
+        additionalProperties: false,
+      },
+    },
+    required: ['summary', 'categories'],
+    additionalProperties: false,
+  };
+}
 
 export function createClassifier(model: string, auth: ClaudeAuth) {
   const env = buildEnv(auth);
   return async (release: Release): Promise<ClassifiedRelease> => {
     const numbered = release.entries.map((entry, i) => `${i + 1}. ${entry}`).join('\n');
-    const prompt = `Version ${release.version}\n\nEntries:\n${numbered}\n\nReturn exactly ${release.entries.length} categories, one per entry, in the same order.`;
+    const prompt = `Version ${release.version}\n\nEntries:\n${numbered}\n\nIn categories, give the category of every entry, keyed by its entry number (1 to ${release.entries.length}).`;
 
     let output: unknown;
     for await (const message of query({
@@ -44,7 +54,7 @@ export function createClassifier(model: string, auth: ClaudeAuth) {
       options: {
         model,
         systemPrompt: SYSTEM_PROMPT,
-        outputFormat: { type: 'json_schema', schema: OUTPUT_SCHEMA },
+        outputFormat: { type: 'json_schema', schema: buildSchema(release.entries.length) },
         // 只需要分類, 關閉所有內建工具, 也不讀取使用者的 CLAUDE.md 和設定.
         tools: [],
         settingSources: [],
@@ -80,14 +90,16 @@ function buildEnv(auth: ClaudeAuth): Record<string, string | undefined> {
   return env;
 }
 
-function parseOutput(output: unknown, expectedCount: number): { summary: string; categories: Category[] } {
-  const value = output as { summary?: unknown; categories?: unknown } | undefined;
-  if (typeof value?.summary !== 'string' || !Array.isArray(value.categories)) {
+function parseOutput(output: unknown, entryCount: number): { summary: string; categories: Category[] } {
+  const value = output as { summary?: unknown; categories?: Record<string, unknown> | null } | undefined;
+  const map = value?.categories;
+  if (typeof value?.summary !== 'string' || typeof map !== 'object' || map === null) {
     throw new Error('Claude 分類結果格式錯誤');
   }
-  if (value.categories.length !== expectedCount) {
-    throw new Error(`Claude 分類數量不符: 預期 ${expectedCount}, 實際 ${value.categories.length}`);
-  }
-  const categories = value.categories.map((c) => (CATEGORIES.includes(c) ? (c as Category) : 'other'));
+  const categories = Array.from({ length: entryCount }, (_, i) => {
+    const category = map[String(i + 1)];
+    if (category === undefined) throw new Error(`Claude 分類結果缺少第 ${i + 1} 條`);
+    return CATEGORIES.includes(category as Category) ? (category as Category) : 'other';
+  });
   return { summary: value.summary, categories };
 }

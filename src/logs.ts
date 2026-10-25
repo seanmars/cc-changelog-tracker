@@ -4,6 +4,10 @@ export type LogLevel = 'info' | 'error';
 
 export type Logger = (level: LogLevel, message: string) => void;
 
+export function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export interface LogEntry {
   id: number;
   time: string;

@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import type { ClassifiedRelease } from '../src/categories.ts';
 import type { FetchResult } from '../src/fetcher.ts';
 import type { State } from '../src/state.ts';
-import { checkOnce, notifyLatest, type TrackerDeps } from '../src/tracker.ts';
+import { checkOnce, fetchRecent, notifyLatest, notifyVersion, type TrackerDeps } from '../src/tracker.ts';
 
 const CHANGELOG = `# Changelog
 
@@ -19,10 +20,11 @@ const CHANGELOG = `# Changelog
 - Added A
 `;
 
-function createDeps(initial: State, fetchResult: FetchResult, failOn?: string) {
+function createDeps(initial: State, fetchResult: FetchResult, failOn?: string, existing: ClassifiedRelease[] = []) {
   const saved: State[] = [];
   const stored: string[] = [];
   const notified: string[] = [];
+  const releases = new Map(existing.map((r) => [r.version, r]));
   let state = initial;
   const deps: TrackerDeps = {
     fetchChangelog: async () => fetchResult,
@@ -37,7 +39,9 @@ function createDeps(initial: State, fetchResult: FetchResult, failOn?: string) {
       entries: r.entries.map((text) => ({ text, category: 'other' })),
     }),
     translate: async (r) => r,
+    find: async (version) => releases.get(version),
     save: async (r) => {
+      releases.set(r.version, r);
       stored.push(r.version);
     },
     notify: async (r) => {
@@ -93,4 +97,29 @@ test('notifyLatest 只通知最新版本, 不修改 state', async () => {
   assert.deepEqual(stored, ['2.1.3']);
   assert.deepEqual(notified, ['2.1.3']);
   assert.deepEqual(saved, []);
+});
+
+const STORED_213: ClassifiedRelease = { version: '2.1.3', summary: '已翻譯', entries: [] };
+
+test('fetchRecent 只翻譯 DB 沒有的版本, 不通知也不修改 state', async () => {
+  const { deps, saved, stored, notified } = createDeps({ lastVersion: '2.1.3', etag: 'old' }, OK, undefined, [STORED_213]);
+  await fetchRecent(deps, 2);
+  assert.deepEqual(stored, ['2.1.2']);
+  assert.deepEqual(notified, []);
+  assert.deepEqual(saved, []);
+});
+
+test('notifyVersion 優先使用 DB 中的翻譯結果', async () => {
+  const { deps, stored, notified } = createDeps({ lastVersion: '2.1.3', etag: 'old' }, OK, undefined, [STORED_213]);
+  await notifyVersion(deps, '2.1.3');
+  assert.deepEqual(stored, []);
+  assert.deepEqual(notified, ['2.1.3']);
+});
+
+test('notifyVersion 在 DB 沒有時先翻譯, 找不到版本時拋出錯誤', async () => {
+  const { deps, stored, notified } = createDeps({ lastVersion: '2.1.3', etag: 'old' }, OK);
+  await notifyVersion(deps, '2.1.1');
+  assert.deepEqual(stored, ['2.1.1']);
+  assert.deepEqual(notified, ['2.1.1']);
+  await assert.rejects(notifyVersion(deps, '9.9.9'), /找不到版本 9\.9\.9/);
 });

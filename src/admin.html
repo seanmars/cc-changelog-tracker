@@ -82,10 +82,25 @@
       }
       button:disabled { opacity: 0.6; cursor: wait; }
       .message.error { color: var(--error); }
-      .logs-header { display: flex; justify-content: space-between; align-items: baseline; }
+      .section-header { display: flex; flex-wrap: wrap; gap: 8px 12px; justify-content: space-between; align-items: baseline; }
+      .inline-form { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+      .inline-form input { width: 72px; }
+      #releases-message { margin: 0 0 12px; font-size: 14px; }
+      #releases-message:empty { display: none; }
+      .release { border-top: 1px solid var(--border); padding: 8px 0; }
+      .release:first-child { border-top: 0; }
+      .release summary { display: flex; gap: 12px; align-items: center; cursor: pointer; list-style: none; }
+      .release summary::before { content: '▸'; color: var(--muted); }
+      .release[open] summary::before { content: '▾'; }
+      .release summary button { margin-left: auto; padding: 4px 14px; font-size: 13px; }
+      .release p { margin: 8px 0; }
+      .release ul { margin: 0 0 8px; padding-left: 20px; font-size: 14px; }
+      .tag { display: inline-block; min-width: 72px; color: var(--muted); font: 12px ui-monospace, Consolas, monospace; }
+      .scroll-box { max-height: 360px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
+      #releases { padding: 0 12px; }
       table { width: 100%; border-collapse: collapse; font-size: 13px; }
       th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
-      th { color: var(--muted); font-weight: 600; }
+      th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: var(--card); }
       td.time { white-space: nowrap; color: var(--muted); font-family: ui-monospace, Consolas, monospace; }
       td.message { word-break: break-word; }
       tr.error td { background: var(--error-bg); }
@@ -106,6 +121,35 @@
           <span class="muted">最後處理的版本: <strong id="last-version">-</strong></span>
         </div>
         <ul id="problems" class="problems" hidden></ul>
+      </section>
+
+      <section>
+        <div class="section-header">
+          <h2>Logs</h2>
+          <span class="muted">每 5 秒自動更新</span>
+        </div>
+        <div class="scroll-box">
+          <table>
+            <thead>
+              <tr><th>時間</th><th>內容</th></tr>
+            </thead>
+            <tbody id="logs"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <div class="section-header">
+          <h2>版本</h2>
+          <form id="fetch-form" class="inline-form">
+            <label for="fetch-count">抓取最近</label>
+            <input id="fetch-count" name="count" type="number" min="1" max="20" value="5" />
+            <span>個版本</span>
+            <button type="submit">抓取</button>
+          </form>
+        </div>
+        <p id="releases-message" class="message muted"></p>
+        <div id="releases" class="scroll-box"></div>
       </section>
 
       <section>
@@ -162,25 +206,16 @@
           </div>
         </form>
       </section>
-
-      <section>
-        <div class="logs-header">
-          <h2>Logs</h2>
-          <span class="muted">每 5 秒自動更新</span>
-        </div>
-        <table>
-          <thead>
-            <tr><th>時間</th><th>內容</th></tr>
-          </thead>
-          <tbody id="logs"></tbody>
-        </table>
-      </section>
     </main>
 
     <script type="module">
       const form = document.querySelector('#settings');
       const message = document.querySelector('#message');
+      const fetchForm = document.querySelector('#fetch-form');
+      const fetchButton = fetchForm.querySelector('button');
+      const releasesMessage = document.querySelector('#releases-message');
       const timeFormat = new Intl.DateTimeFormat('zh-TW', { dateStyle: 'short', timeStyle: 'medium', hour12: false });
+      let wasFetching = false;
 
       async function api(path, options) {
         const res = await fetch(path, options);
@@ -189,7 +224,19 @@
         return body;
       }
 
+      function apiJson(method, path, body) {
+        return api(path, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      }
+
+      function showMessage(element, text, isError = false) {
+        element.className = `message ${isError ? 'error' : 'muted'}`;
+        element.textContent = text;
+      }
+
       function renderStatus(status) {
+        fetchButton.disabled = status.fetching;
+        fetchButton.textContent = status.fetching ? '抓取中...' : '抓取';
+
         const badge = document.querySelector('#badge');
         badge.textContent = status.ready ? 'Tracking 中' : '已暫停: 設定未完成';
         badge.className = `badge ${status.ready ? 'ok' : 'paused'}`;
@@ -218,15 +265,87 @@
         document.querySelector('#logs').replaceChildren(...rows);
       }
 
+      function renderReleases(releases) {
+        const container = document.querySelector('#releases');
+        // 重新產生清單時保留已展開的版本.
+        const opened = new Set([...container.querySelectorAll('details[open]')].map((item) => item.dataset.version));
+        const items = releases.map((release) => {
+          const item = Object.assign(document.createElement('details'), { className: 'release', open: opened.has(release.version) });
+          item.dataset.version = release.version;
+
+          const button = Object.assign(document.createElement('button'), { type: 'button', textContent: '送出通知' });
+          button.addEventListener('click', (event) => {
+            // 按鈕在 summary 裡面, 不讓點擊同時展開或收合.
+            event.preventDefault();
+            notifyRelease(release.version, button);
+          });
+          const summary = document.createElement('summary');
+          summary.append(
+            Object.assign(document.createElement('strong'), { textContent: `v${release.version}` }),
+            Object.assign(document.createElement('span'), { className: 'muted', textContent: `${release.entries.length} 條` }),
+            button,
+          );
+
+          const entries = release.entries.map((entry) => {
+            const li = document.createElement('li');
+            li.append(Object.assign(document.createElement('span'), { className: 'tag', textContent: entry.category }), entry.text);
+            return li;
+          });
+          const list = document.createElement('ul');
+          list.append(...entries);
+          item.append(summary, Object.assign(document.createElement('p'), { textContent: release.summary }), list);
+          return item;
+        });
+        if (items.length === 0) {
+          items.push(Object.assign(document.createElement('p'), { className: 'muted', textContent: '還沒有任何版本, 請先抓取' }));
+        }
+        container.replaceChildren(...items);
+      }
+
+      async function loadReleases() {
+        renderReleases(await api('/api/releases'));
+      }
+
+      async function notifyRelease(version, button) {
+        if (!confirm(`要送出 v${version} 的通知到 Discord 嗎?`)) return;
+        button.disabled = true;
+        showMessage(releasesMessage, `送出 v${version} 的通知中...`);
+        try {
+          await apiJson('POST', '/api/releases/notify', { version });
+          showMessage(releasesMessage, `已送出 v${version} 的通知`);
+        } catch (error) {
+          showMessage(releasesMessage, `送出 v${version} 失敗: ${error.message}`, true);
+        } finally {
+          button.disabled = false;
+          refresh();
+        }
+      }
+
       async function refresh() {
         try {
           const [status, logs] = await Promise.all([api('/api/status'), api('/api/logs')]);
           renderStatus(status);
           renderLogs(logs);
+          // 抓取中每次都更新版本清單, 抓取結束時再更新最後一次.
+          if (status.fetching || wasFetching) await loadReleases();
+          if (wasFetching && !status.fetching) showMessage(releasesMessage, '抓取結束, 結果請看 Logs');
+          wasFetching = status.fetching;
         } catch (error) {
           document.querySelector('#badge').textContent = `無法連線: ${error.message}`;
         }
       }
+
+      fetchForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        try {
+          const status = await apiJson('POST', '/api/releases/fetch', { count: Number(fetchForm.elements.count.value) });
+          renderStatus(status);
+          showMessage(releasesMessage, '開始抓取, 進度會顯示在 Logs');
+          await refresh();
+        } catch (error) {
+          showMessage(releasesMessage, `抓取失敗: ${error.message}`, true);
+        }
+      });
 
       async function loadSettings() {
         const settings = await api('/api/settings');
@@ -240,27 +359,21 @@
         event.preventDefault();
         const button = form.querySelector('button');
         button.disabled = true;
-        message.className = 'message muted';
-        message.textContent = '儲存中...';
+        showMessage(message, '儲存中...');
         try {
-          const status = await api('/api/settings', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(Object.fromEntries(new FormData(form))),
-          });
+          const status = await apiJson('PUT', '/api/settings', Object.fromEntries(new FormData(form)));
           renderStatus(status);
-          message.textContent = status.ready ? '已儲存, 開始 tracking' : '已儲存, 但設定還沒完成';
+          showMessage(message, status.ready ? '已儲存, 開始 tracking' : '已儲存, 但設定還沒完成');
           await loadSettings();
           setTimeout(refresh, 1000);
         } catch (error) {
-          message.className = 'message error';
-          message.textContent = `儲存失敗: ${error.message}`;
+          showMessage(message, `儲存失敗: ${error.message}`, true);
         } finally {
           button.disabled = false;
         }
       });
 
-      await Promise.all([loadSettings(), refresh()]);
+      await Promise.all([loadSettings(), loadReleases(), refresh()]);
       setInterval(refresh, 5000);
     </script>
   </body>

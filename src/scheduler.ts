@@ -1,5 +1,5 @@
 import { setTimeout as sleep } from 'node:timers/promises';
-import type { Logger } from './logs.ts';
+import { errorMessage, type Logger } from './logs.ts';
 import type { ParseResult, TrackerConfig } from './settings.ts';
 
 export interface SchedulerDeps {
@@ -43,7 +43,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
         try {
           await deps.check(config);
         } catch (error) {
-          deps.log('error', `檢查失敗, 下次重試: ${error instanceof Error ? error.message : String(error)}`);
+          deps.log('error', `檢查失敗, 下次重試: ${errorMessage(error)}`);
         }
         await waitFor(currentInterval * 60_000, waitSignal);
       }

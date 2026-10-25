@@ -23,3 +23,12 @@ test('同一版本再存一次時覆寫', () => {
   store.put({ ...RELEASE, summary: '新摘要' });
   assert.equal(store.get('2.1.3')?.summary, '新摘要');
 });
+
+test('list 依版本號由新到舊排序', () => {
+  const store = openReleaseStore(new DatabaseSync(':memory:'));
+  for (const version of ['2.1.9', '2.1.10', '2.0.0']) store.put({ ...RELEASE, version });
+  assert.deepEqual(
+    store.list().map((r) => r.version),
+    ['2.1.10', '2.1.9', '2.0.0'],
+  );
+});
