@@ -4,8 +4,8 @@ export interface Config {
   changelogUrl: string;
   linkUrl: string;
   checkIntervalMinutes: number;
-  statePath: string;
   dbPath: string;
+  legacyStatePath: string;
   discordWebhookUrl: string;
   geminiApiKey: string;
   geminiModel: string;
@@ -25,8 +25,9 @@ export function loadConfig(): Config {
       process.env.CHANGELOG_URL ?? 'https://raw.githubusercontent.com/anthropics/claude-code/refs/heads/main/CHANGELOG.md',
     linkUrl: process.env.LINK_URL ?? 'https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md',
     checkIntervalMinutes,
-    statePath: process.env.STATE_PATH ?? 'data/state.json',
     dbPath: process.env.DB_PATH ?? 'data/tracker.db',
+    // 舊版的 state.json 位置, 只在啟動時匯入一次.
+    legacyStatePath: process.env.STATE_PATH ?? 'data/state.json',
     discordWebhookUrl: required('DISCORD_WEBHOOK_URL'),
     geminiApiKey: required('GEMINI_API_KEY'),
     geminiModel: process.env.GEMINI_MODEL ?? 'gemini-3.5-flash-lite',
