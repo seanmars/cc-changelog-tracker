@@ -48,11 +48,12 @@
 
 1. 在已登入 Claude Code 的電腦上執行 `claude setup-token`, 記下產生的 token.
 2. 把專案 (不含 `node_modules`) 複製到樹莓派.
-3. 在樹莓派的專案目錄執行 `docker compose up -d --build`.
-4. 開啟後台 `http://<樹莓派 IP>:3000`, 填入設定. Claude 認證方式選「OAuth token」, 填入第 1 步的 token.
-5. 在後台的 Logs 區塊確認出現「初始化完成」.
+3. 在樹莓派的專案目錄執行 `mkdir -p data && sudo chown 1000:1000 data`. container 以 uid 1000 寫入這個目錄.
+4. 在樹莓派的專案目錄執行 `docker compose up -d --build`.
+5. 開啟後台 `http://<樹莓派 IP>:3000`, 填入設定. Claude 認證方式選「OAuth token」, 填入第 1 步的 token.
+6. 在後台的 Logs 區塊確認出現「初始化完成」.
 
-設定和進度保存在 Docker volume `tracker-data`. 只要不刪除這個 volume, 重新 build 也不會重複通知, 也不用重新設定.
+設定和進度保存在 host 的 `data/` 目錄 (bind mount 到 container 的 `/app/data`). 只要不刪除這個目錄, 重新 build 也不會重複通知, 也不用重新設定. 備份時複製 `data/` 即可.
 
 ## 開發
 
