@@ -36,6 +36,7 @@ export function openLogStore(db: DatabaseSync, maxEntries = 1000): LogStore {
       const { lastInsertRowid } = insert.run(new Date().toISOString(), level, message);
       prune.run(Number(lastInsertRowid) - maxEntries);
     },
-    recent: (limit) => selectRecent.all(limit) as unknown as LogEntry[],
+    // DB 最多只有 maxEntries 筆, 所以 limit 限制在 1 到 maxEntries 之間.
+    recent: (limit) => selectRecent.all(Math.min(Math.max(limit, 1), maxEntries)) as unknown as LogEntry[],
   };
 }

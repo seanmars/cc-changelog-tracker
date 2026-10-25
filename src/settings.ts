@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 
-export const CLAUDE_AUTH_TYPES = ['oauth-token', 'api-key'] as const;
+const CLAUDE_AUTH_TYPES =['oauth-token', 'api-key'] as const;
 
 export type ClaudeAuthType = (typeof CLAUDE_AUTH_TYPES)[number];
 
@@ -17,7 +17,7 @@ export interface Settings {
   linkUrl: string;
 }
 
-export type SettingKey = keyof Settings;
+type SettingKey = keyof Settings;
 
 export const DEFAULT_SETTINGS: Settings = {
   discordWebhookUrl: '',
@@ -31,9 +31,9 @@ export const DEFAULT_SETTINGS: Settings = {
   linkUrl: 'https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md',
 };
 
-export const SETTING_KEYS = Object.keys(DEFAULT_SETTINGS) as SettingKey[];
+const SETTING_KEYS = Object.keys(DEFAULT_SETTINGS) as SettingKey[];
 
-export const SETTING_LABELS: Record<SettingKey, string> = {
+const SETTING_LABELS:Record<SettingKey, string> = {
   discordWebhookUrl: 'Discord webhook URL',
   geminiApiKey: 'Gemini API key',
   claudeAuthType: 'Claude 認證方式',
@@ -125,7 +125,7 @@ export function openSettingsStore(db: DatabaseSync): SettingsStore {
     load: () => {
       const settings = { ...DEFAULT_SETTINGS };
       for (const row of selectAll.all() as { key: string; value: string }[]) {
-        if ((SETTING_KEYS as string[]).includes(row.key)) settings[row.key as SettingKey] = row.value;
+        if (Object.hasOwn(DEFAULT_SETTINGS, row.key)) settings[row.key as SettingKey] = row.value;
       }
       return settings;
     },

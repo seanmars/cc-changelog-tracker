@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { compareVersions, findNewReleases, latestVersion, parseChangelog } from '../src/changelog.ts';
+import { compareVersions, findNewReleases, latestRelease, parseChangelog } from '../src/changelog.ts';
 
 const SAMPLE = `# Changelog
 
@@ -37,8 +37,8 @@ test('compareVersions 用數字比較, 不是字串比較', () => {
   assert.equal(compareVersions('1.2.3', '1.2.3'), 0);
 });
 
-test('latestVersion 回傳最大版本', () => {
-  assert.equal(latestVersion(parseChangelog(SAMPLE)), '2.1.10');
+test('latestRelease 回傳最大版本', () => {
+  assert.equal(latestRelease(parseChangelog(SAMPLE)).version, '2.1.10');
 });
 
 test('findNewReleases 回傳較新的版本, 由舊到新排序', () => {

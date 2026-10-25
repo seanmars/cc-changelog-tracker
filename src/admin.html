@@ -180,6 +180,7 @@
     <script type="module">
       const form = document.querySelector('#settings');
       const message = document.querySelector('#message');
+      const timeFormat = new Intl.DateTimeFormat('zh-TW', { dateStyle: 'short', timeStyle: 'medium', hour12: false });
 
       async function api(path, options) {
         const res = await fetch(path, options);
@@ -208,7 +209,7 @@
           row.className = entry.level;
           const time = Object.assign(document.createElement('td'), {
             className: 'time',
-            textContent: new Date(entry.time).toLocaleString('zh-TW', { hour12: false }),
+            textContent: timeFormat.format(new Date(entry.time)),
           });
           const text = Object.assign(document.createElement('td'), { className: 'message', textContent: entry.message });
           row.append(time, text);

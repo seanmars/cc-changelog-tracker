@@ -7,7 +7,6 @@ import type { State } from './state.ts';
 const ADMIN_HTML = readFileSync(new URL('./admin.html', import.meta.url));
 const MAX_BODY_BYTES = 64 * 1024;
 const DEFAULT_LOG_LIMIT = 200;
-const MAX_LOG_LIMIT = 1000;
 
 export interface AdminDeps {
   settings: SettingsStore;
@@ -16,7 +15,7 @@ export interface AdminDeps {
   onSettingsSaved(): void;
 }
 
-export interface AdminStatus {
+interface AdminStatus {
   ready: boolean;
   problems: string[];
   lastVersion: string | null;
@@ -61,7 +60,7 @@ async function handle(deps: AdminDeps, req: IncomingMessage, res: ServerResponse
     }
     case 'GET /api/logs': {
       const limit = Number(url.searchParams.get('limit')) || DEFAULT_LOG_LIMIT;
-      return sendJson(res, 200, deps.logs.recent(Math.min(limit, MAX_LOG_LIMIT)));
+      return sendJson(res, 200, deps.logs.recent(limit));
     }
     default:
       throw new HttpError(404, '找不到這個路徑');

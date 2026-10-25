@@ -37,8 +37,8 @@ export function compareVersions(a: string, b: string): number {
   return 0;
 }
 
-export function latestVersion(releases: Release[]): string {
-  return releases.map((r) => r.version).reduce((a, b) => (compareVersions(a, b) >= 0 ? a : b));
+export function latestRelease(releases: Release[]): Release {
+  return releases.reduce((a, b) => (compareVersions(a.version, b.version) >= 0 ? a : b));
 }
 
 // 回傳比 lastVersion 新的版本, 由舊到新排序, 方便依序通知.

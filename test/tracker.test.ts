@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { FetchResult } from '../src/fetcher.ts';
 import type { State } from '../src/state.ts';
-import { checkOnce, type TrackerDeps } from '../src/tracker.ts';
+import { checkOnce, notifyLatest, type TrackerDeps } from '../src/tracker.ts';
 
 const CHANGELOG = `# Changelog
 
@@ -85,4 +85,12 @@ test('中途失敗時保留進度和舊 ETag, 下次從失敗的版本繼續', a
 test('找不到任何版本時拋出錯誤', async () => {
   const { deps } = createDeps({ lastVersion: '2.1.1', etag: 'old' }, { status: 'ok', body: '# Empty', etag: 'x' });
   await assert.rejects(checkOnce(deps), /找不到任何版本/);
+});
+
+test('notifyLatest 只通知最新版本, 不修改 state', async () => {
+  const { deps, saved, stored, notified } = createDeps({ lastVersion: '2.1.3', etag: 'old' }, OK);
+  await notifyLatest(deps);
+  assert.deepEqual(stored, ['2.1.3']);
+  assert.deepEqual(notified, ['2.1.3']);
+  assert.deepEqual(saved, []);
 });

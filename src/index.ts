@@ -1,4 +1,3 @@
-import { latestVersion, parseChangelog } from './changelog.ts';
 import { createClassifier } from './classifier.ts';
 import { loadServerConfig } from './config.ts';
 import { openDatabase } from './db.ts';
@@ -8,9 +7,9 @@ import { openLogStore, type LogLevel } from './logs.ts';
 import { openReleaseStore } from './releases.ts';
 import { createScheduler } from './scheduler.ts';
 import { createAdminServer } from './server.ts';
-import { openSettingsStore, parseSettings, type TrackerConfig } from './settings.ts';
+import { openSettingsStore, parseSettings, type ParseResult, type TrackerConfig } from './settings.ts';
 import { openStateStore } from './state.ts';
-import { checkOnce, processRelease, type TrackerDeps } from './tracker.ts';
+import { checkOnce, notifyLatest, type TrackerDeps } from './tracker.ts';
 import { createTranslator } from './translator.ts';
 
 const serverConfig = loadServerConfig();
@@ -46,8 +45,12 @@ function createDeps(config: TrackerConfig): TrackerDeps {
   };
 }
 
+function loadConfig(): ParseResult {
+  return parseSettings(settingsStore.load());
+}
+
 function requireConfig(): TrackerConfig {
-  const result = parseSettings(settingsStore.load());
+  const result = loadConfig();
   if (!result.ok) throw new Error(`設定未完成, 請先到後台設定: ${result.problems.join(', ')}`);
   return result.config;
 }
@@ -55,19 +58,12 @@ function requireConfig(): TrackerConfig {
 const args = new Set(process.argv.slice(2));
 
 if (args.has('--notify-latest')) {
-  // 測試用: 不看 state, 直接通知最新版本.
-  const config = requireConfig();
-  const result = await fetchChangelog(config.changelogUrl, null);
-  if (result.status !== 'ok') throw new Error('無法下載 CHANGELOG');
-  const releases = parseChangelog(result.body);
-  const latest = releases.find((r) => r.version === latestVersion(releases))!;
-  log('info', `送出最新版本 ${latest.version} 的通知`);
-  await processRelease(createDeps(config), latest);
+  await notifyLatest(createDeps(requireConfig()));
 } else if (args.has('--once')) {
   await checkOnce(createDeps(requireConfig()));
 } else {
   const scheduler = createScheduler({
-    loadConfig: () => parseSettings(settingsStore.load()),
+    loadConfig,
     check: (config) => checkOnce(createDeps(config)),
     log,
   });

@@ -24,13 +24,14 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
       while (!signal.aborted) {
         // 在檢查之前建立. 檢查途中改了設定, 檢查結束後會立刻用新設定再跑一次.
         wakeController = new AbortController();
+        const waitSignal = AbortSignal.any([signal, wakeController.signal]);
         const result = deps.loadConfig();
 
         if (!result.ok) {
           // 設定未完成時不啟動計時器, 一直等到後台存檔.
           currentInterval = null;
           deps.log('info', `設定未完成, 暫停 tracking: ${result.problems.join(', ')}`);
-          await waitFor(null, AbortSignal.any([signal, wakeController.signal]));
+          await waitFor(null, waitSignal);
           continue;
         }
 
@@ -44,7 +45,7 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
         } catch (error) {
           deps.log('error', `檢查失敗, 下次重試: ${error instanceof Error ? error.message : String(error)}`);
         }
-        await waitFor(currentInterval * 60_000, AbortSignal.any([signal, wakeController.signal]));
+        await waitFor(currentInterval * 60_000, waitSignal);
       }
     },
   };

@@ -16,15 +16,16 @@ export function buildMessages(release: ClassifiedRelease, linkUrl: string): Disc
     const texts = release.entries.filter((e) => e.category === category).map((e) => e.text);
     if (texts.length === 0) continue;
     lines.push(`**${CATEGORY_LABELS[category]} (${texts.length})**`);
-    lines.push(...texts.map((t) => truncate(`- ${t}`, MAX_DESCRIPTION)));
+    lines.push(...texts.map((t) => `- ${t}`));
     lines.push('');
   }
 
+  const title = `Claude Code v${release.version}`;
   const chunks = chunkLines(lines, MAX_DESCRIPTION);
   return chunks.map((description, i) => ({
     embeds: [
       {
-        title: chunks.length === 1 ? `Claude Code v${release.version}` : `Claude Code v${release.version} (${i + 1}/${chunks.length})`,
+        title: chunks.length === 1 ? title : `${title} (${i + 1}/${chunks.length})`,
         url: linkUrl,
         description,
         color: EMBED_COLOR,
@@ -33,10 +34,12 @@ export function buildMessages(release: ClassifiedRelease, linkUrl: string): Disc
   }));
 }
 
+// 超過 maxLength 的單行會先截斷, 每個 chunk 都不會超過上限.
 function chunkLines(lines: string[], maxLength: number): string[] {
   const chunks: string[] = [];
   let current = '';
-  for (const line of lines) {
+  for (const rawLine of lines) {
+    const line = truncate(rawLine, maxLength);
     const next = current === '' ? line : `${current}\n${line}`;
     if (next.length > maxLength && current !== '') {
       chunks.push(current.trimEnd());
