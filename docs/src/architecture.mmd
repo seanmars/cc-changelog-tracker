@@ -1,0 +1,40 @@
+flowchart LR
+  env[(".env")]
+
+  subgraph app["cc-changelog-tracker (Node.js 24)"]
+    config["config.ts<br/>讀取設定"]
+    index["index.ts<br/>主迴圈 / CLI 參數"]
+    tracker["tracker.ts<br/>checkOnce / processRelease"]
+    fetcher["fetcher.ts<br/>ETag 條件式下載"]
+    changelog["changelog.ts<br/>解析與比較版本"]
+    classifier["classifier.ts<br/>分類 + 英文摘要"]
+    translator["translator.ts<br/>翻譯成正體中文"]
+    discord["discord.ts<br/>組 embed 並送出"]
+    state["state.ts<br/>讀寫進度"]
+  end
+
+  subgraph ext["外部服務"]
+    github["GitHub raw<br/>CHANGELOG.md"]
+    claude["Claude Code CLI<br/>claude-sonnet-5-5"]
+    gemini["Gemini API<br/>gemini-3.5-flash-lite"]
+    webhook["Discord webhook"]
+  end
+
+  subgraph local["本機檔案"]
+    statefile[("data/state.json")]
+  end
+
+  env --> config
+  config --> index
+  index --> tracker
+  tracker --> fetcher
+  tracker --> changelog
+  tracker --> classifier
+  tracker --> translator
+  tracker --> discord
+  tracker --> state
+  fetcher -->|"HTTP GET"| github
+  classifier -->|"Agent SDK 子程序"| claude
+  translator -->|"interactions.create"| gemini
+  discord -->|"HTTP POST"| webhook
+  state -->|"讀寫"| statefile

@@ -1,0 +1,36 @@
+stateDiagram-v2
+  state "等待計時器" as Idle
+  state "讀取 state.json" as Load
+  state "下載 CHANGELOG<br/>帶 If-None-Match" as Fetch
+  state "解析版本" as Parse
+  state "初始化<br/>只記錄最新版本" as Init
+  state "找出新版本<br/>由舊到新排序" as Diff
+  state "Claude 分類 + 摘要" as Classify
+  state "Gemini 翻譯" as Translate
+  state "送出 Discord 通知" as Notify
+  state "保存進度<br/>lastVersion 前進, 保留舊 ETag" as SaveProgress
+  state "保存新 ETag" as SaveEtag
+  state "記錄錯誤" as Failed
+
+  [*] --> Idle : 啟動
+  Idle --> Load : 時間到
+  Load --> Fetch
+  Fetch --> Idle : 304 沒有變化
+  Fetch --> Parse : 200
+  Parse --> Failed : 找不到任何版本
+  Parse --> Init : lastVersion 為 null
+  Init --> Idle
+  Parse --> Diff : 已有 lastVersion
+  Diff --> SaveEtag : 沒有新版本
+  Diff --> Classify : 有新版本
+  Classify --> Translate
+  Translate --> Notify
+  Notify --> SaveProgress
+  SaveProgress --> Classify : 還有下一個版本
+  SaveProgress --> SaveEtag : 全部送出
+  SaveEtag --> Idle
+  Classify --> Failed : 失敗
+  Translate --> Failed : 失敗
+  Notify --> Failed : 失敗
+  Failed --> Idle : 下次重試
+  Idle --> [*] : SIGINT / SIGTERM

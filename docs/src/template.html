@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cc-changelog-tracker 架構文件</title>
+<style>
+  :root {
+    --font: "Segoe UI", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", system-ui, sans-serif;
+    --font-mono: "Cascadia Code", Consolas, "SF Mono", monospace;
+    --page-bg: #f6f5f1;
+    --card-bg: #ffffff;
+    --text: #1f1e1b;
+    --muted: #6b6860;
+    --rule: #e3e0d8;
+    --accent: #c4623f;
+    --code-bg: #f1efe9;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page-bg: #171614;
+      --card-bg: #201f1c;
+      --text: #e8e5dc;
+      --muted: #a29e93;
+      --rule: #34322d;
+      --accent: #e08a68;
+      --code-bg: #2a2925;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page-bg);
+    color: var(--text);
+    font: 16px/1.7 var(--font);
+  }
+  main { max-width: 1240px; margin: 0 auto; padding: 48px 24px 64px; }
+
+  header { margin-bottom: 40px; }
+  header p.eyebrow {
+    margin: 0 0 8px;
+    color: var(--accent);
+    font: 600 13px/1 var(--font-mono);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  h1 { margin: 0 0 12px; font-size: 32px; line-height: 1.3; }
+  header p.lead { margin: 0; max-width: 760px; color: var(--muted); }
+  nav { display: flex; gap: 20px; margin-top: 20px; font-size: 15px; }
+  nav a { color: var(--text); text-decoration-color: var(--accent); text-underline-offset: 4px; }
+
+  section {
+    margin-bottom: 32px;
+    padding: 28px;
+    background: var(--card-bg);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+  }
+  h2 { margin: 0 0 6px; font-size: 22px; }
+  section > p { margin: 0 0 20px; color: var(--muted); }
+  section ul { margin: 20px 0 0; padding-left: 20px; }
+  section li + li { margin-top: 4px; }
+  code { padding: 1px 6px; background: var(--code-bg); border-radius: 4px; font: 14px var(--font-mono); }
+
+  .diagram {
+    position: relative;
+    padding: 16px 0;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+  }
+  .diagram.tall { max-width: 900px; margin: 0 auto; }
+
+  .pele {
+    --pele-bg: var(--card-bg);
+    --pele-fg: var(--text);
+    --pele-muted: var(--muted);
+    --pele-line: var(--muted);
+    --pele-surface: #f7f4ee;
+    --pele-surface-alt: #faf9f6;
+    --pele-border: #c9c3b6;
+    --pele-accent: var(--accent);
+    --pele-font: var(--font);
+    --pele-font-mono: var(--font-mono);
+    --pele-radius: 6px;
+  }
+  @media (prefers-color-scheme: dark) {
+    .pele {
+      --pele-surface: #2b2a26;
+      --pele-surface-alt: #242320;
+      --pele-border: #55524a;
+    }
+  }
+
+  details { margin-top: 20px; }
+  summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+  pre {
+    overflow-x: auto;
+    margin: 12px 0 0;
+    padding: 16px;
+    background: var(--code-bg);
+    border-radius: 6px;
+    font: 13px/1.6 var(--font-mono);
+  }
+
+  footer { color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="eyebrow">cc-changelog-tracker</p>
+    <h1>架構圖與狀態流程圖</h1>
+    <p class="lead">定時偵測 Claude Code CHANGELOG 的新版本. Claude 負責分類和摘要, Gemini 負責翻譯, 最後送到 Discord.</p>
+    <nav>
+      <a href="#architecture">架構圖</a>
+      <a href="#state-flow">狀態流程圖</a>
+    </nav>
+  </header>
+
+  <section id="architecture">
+    <h2>架構圖</h2>
+    <p>模組之間的相依關係, 以及每個模組使用的外部服務.</p>
+    <div class="diagram" data-diagram="architecture"></div>
+    <ul>
+      <li><code>tracker.ts</code> 負責整個流程. 其他模組透過 <code>TrackerDeps</code> 注入, 所以測試時可以換成假的實作.</li>
+      <li><code>classifier.ts</code> 透過 Agent SDK 啟動 Claude Code CLI 子程序. 這個子程序沒有任何工具, 也不讀取使用者設定.</li>
+      <li>只有 <code>state.ts</code> 會寫入檔案. 寫入時先寫暫存檔再 rename, 避免留下不完整的檔案.</li>
+    </ul>
+    <details>
+      <summary>Mermaid 原始碼</summary>
+      <pre data-source="architecture"></pre>
+    </details>
+  </section>
+
+  <section id="state-flow">
+    <h2>狀態流程圖</h2>
+    <p>一次檢查 (<code>checkOnce</code>) 的狀態變化. 一次檢查結束後才開始計時, 所以兩次檢查不會同時執行.</p>
+    <div class="diagram tall" data-diagram="state-flow"></div>
+    <ul>
+      <li>每送出一個版本, 就保存一次 <code>lastVersion</code>. 這時仍保留舊的 ETag.</li>
+      <li>所有新版本都送出後, 才保存新的 ETag. 如果中途失敗, 下次檢查會重新下載, 並從失敗的版本繼續.</li>
+      <li>第一次執行只記錄目前的最新版本, 不送出歷史版本的通知.</li>
+    </ul>
+    <details>
+      <summary>Mermaid 原始碼</summary>
+      <pre data-source="state-flow"></pre>
+    </details>
+  </section>
+
+  <footer>
+    <p>圖表由 Pele 在瀏覽器中 render. 所有資源都內嵌在這個檔案中, 離線也能閱讀. 修改 <code>docs/src/*.mmd</code> 後, 執行 <code>pnpm run docs</code> 重新產生.</p>
+  </footer>
+</main>
+
+<script type="text/plain" id="src-architecture">
+{{architecture}}
+</script>
+<script type="text/plain" id="src-state-flow">
+{{state-flow}}
+</script>
+<script>
+{{pele}}
+</script>
+<script>
+  const font = getComputedStyle(document.documentElement).getPropertyValue('--font').trim();
+  const sourceOf = (name) => document.getElementById(`src-${name}`).textContent.trim();
+
+  for (const element of document.querySelectorAll('[data-diagram]')) {
+    pele.mount(element, sourceOf(element.dataset.diagram), { fontFamily: font, zoom: 'auto' });
+  }
+  for (const pre of document.querySelectorAll('[data-source]')) {
+    pre.textContent = sourceOf(pre.dataset.source);
+  }
+</script>
+</body>
+</html>
