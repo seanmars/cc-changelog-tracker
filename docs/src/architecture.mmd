@@ -10,7 +10,8 @@ flowchart LR
     classifier["classifier.ts<br/>分類 + 英文摘要"]
     translator["translator.ts<br/>翻譯成正體中文"]
     discord["discord.ts<br/>組 embed 並送出"]
-    state["state.ts<br/>讀寫進度"]
+    state["state.ts<br/>讀寫進度 / 匯入舊檔"]
+    store["store.ts<br/>儲存翻譯結果"]
   end
 
   subgraph ext["外部服務"]
@@ -21,7 +22,7 @@ flowchart LR
   end
 
   subgraph local["本機檔案"]
-    statefile[("data/state.json")]
+    dbfile[("data/tracker.db<br/>SQLite")]
   end
 
   env --> config
@@ -33,8 +34,10 @@ flowchart LR
   tracker --> translator
   tracker --> discord
   tracker --> state
+  tracker --> store
   fetcher -->|"HTTP GET"| github
   classifier -->|"Agent SDK 子程序"| claude
   translator -->|"interactions.create"| gemini
   discord -->|"HTTP POST"| webhook
-  state -->|"讀寫"| statefile
+  state -->|"state 表"| dbfile
+  store -->|"releases 表"| dbfile

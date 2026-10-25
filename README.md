@@ -20,7 +20,16 @@
 | `pnpm run check` | 只檢查一次 |
 | `pnpm run notify-latest` | 測試用, 直接通知最新版本, 不更新 state |
 
-第一次執行只記錄目前的最新版本, 不送通知. 進度保存在 `data/state.json`.
+第一次執行只記錄目前的最新版本, 不送通知.
+
+資料保存在 SQLite `data/tracker.db`, 兩個表都是 kv 格式:
+
+| 表 | key | value |
+|---|---|---|
+| `state` | `lastVersion`, `etag` | 進度 |
+| `releases` | 版本號 | 翻譯後的 release JSON |
+
+啟動時若找到舊版的 `data/state.json`, 而且 DB 還沒有進度, 會自動匯入, 並把原檔改名為 `state.json.imported`.
 
 ## 部署到樹莓派 (Docker)
 
