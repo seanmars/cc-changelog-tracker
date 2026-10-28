@@ -4,6 +4,7 @@ import { errorMessage, type LogStore } from './logs.ts';
 import type { ReleaseStore } from './releases.ts';
 import { DEFAULT_SETTINGS, mergeSettings, parseSettings, type SettingsStore } from './settings.ts';
 import type { State } from './state.ts';
+import type { CheckResult } from './tracker.ts';
 
 const ADMIN_HTML = readFileSync(new URL('./admin.html', import.meta.url));
 const MAX_BODY_BYTES = 64 * 1024;
@@ -15,6 +16,8 @@ export interface AdminDeps {
   logs: LogStore;
   releases: Pick<ReleaseStore, 'list'>;
   loadState(): State;
+  // 啟動後還沒檢查過時回傳 null.
+  lastCheck(): LastCheck | null;
   onSettingsSaved(): void;
   // 在背景抓取最近 count 個版本. 已經在抓取時回傳 false.
   fetchRecent(count: number): boolean;
@@ -23,10 +26,16 @@ export interface AdminDeps {
   retranslate(version: string): Promise<void>;
 }
 
+export interface LastCheck {
+  time: string;
+  result: CheckResult | 'failed';
+}
+
 interface AdminStatus {
   ready: boolean;
   problems: string[];
   lastVersion: string | null;
+  lastCheck: LastCheck | null;
   fetching: boolean;
 }
 
@@ -106,6 +115,7 @@ function getStatus(deps: AdminDeps): AdminStatus {
     ready: result.ok,
     problems: result.ok ? [] : result.problems,
     lastVersion: deps.loadState().lastVersion,
+    lastCheck: deps.lastCheck(),
     fetching: deps.isFetching(),
   };
 }

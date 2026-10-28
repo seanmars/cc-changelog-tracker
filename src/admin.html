@@ -132,7 +132,7 @@
       <section>
         <div class="section-header">
           <h2>Logs</h2>
-          <span class="muted">每 5 秒自動更新</span>
+          <span class="muted"><span id="last-check">尚未檢查</span> · 每 5 秒自動更新</span>
         </div>
         <div class="scroll-box">
           <table>
@@ -232,6 +232,7 @@
       const fetchButton = fetchForm.querySelector('button');
       const releasesMessage = document.querySelector('#releases-message');
       const timeFormat = new Intl.DateTimeFormat('zh-TW', { dateStyle: 'short', timeStyle: 'medium', hour12: false });
+      const CHECK_RESULTS = { 'not-modified': '沒有變化', changed: '有變化', failed: '失敗, 原因請看 Logs' };
       let wasFetching = false;
 
       async function api(path, options) {
@@ -258,6 +259,11 @@
         badge.textContent = status.ready ? 'Tracking 中' : '已暫停: 設定未完成';
         badge.className = `badge ${status.ready ? 'ok' : 'paused'}`;
         document.querySelector('#last-version').textContent = status.lastVersion ?? '尚未初始化';
+        // 沒有變化時不寫 log, 改在 Logs 標題旁顯示最後檢查的時間和結果.
+        const { lastCheck } = status;
+        document.querySelector('#last-check').textContent = lastCheck
+          ? `最後檢查: ${timeFormat.format(new Date(lastCheck.time))} ${CHECK_RESULTS[lastCheck.result]}`
+          : '尚未檢查';
 
         const problems = document.querySelector('#problems');
         problems.replaceChildren(

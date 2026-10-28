@@ -22,6 +22,7 @@ const server = createAdminServer({
   logs,
   releases,
   loadState: () => ({ lastVersion: '2.1.3', etag: null }),
+  lastCheck: () => ({ time: '2026-10-28T00:00:00.000Z', result: 'not-modified' }),
   onSettingsSaved: () => {
     wakeCount++;
   },
@@ -86,7 +87,13 @@ test('PUT 設定後保存並喚醒 scheduler', async () => {
     }),
   );
   assert.equal(res.status, 200);
-  assert.deepEqual(await res.json(), { ready: true, problems: [], lastVersion: '2.1.3', fetching: false });
+  assert.deepEqual(await res.json(), {
+    ready: true,
+    problems: [],
+    lastVersion: '2.1.3',
+    lastCheck: { time: '2026-10-28T00:00:00.000Z', result: 'not-modified' },
+    fetching: false,
+  });
   assert.equal(wakeCount, 1);
   assert.equal(settings.load().geminiApiKey, 'gemini-key');
 });
@@ -97,10 +104,10 @@ test('PUT 錯誤的 JSON 回傳 400', async () => {
 });
 
 test('GET /api/logs 回傳最新的 log', async () => {
-  logs.add('info', 'CHANGELOG 沒有變化');
+  logs.add('info', '處理新版本 2.1.3 (1 條)');
   const entries = await (await fetch(`${baseUrl}/api/logs?limit=1`)).json();
   assert.equal(entries.length, 1);
-  assert.equal(entries[0].message, 'CHANGELOG 沒有變化');
+  assert.equal(entries[0].message, '處理新版本 2.1.3 (1 條)');
 });
 
 test('不是 application/json 的寫入請求回傳 415', async () => {

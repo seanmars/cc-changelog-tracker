@@ -94,13 +94,13 @@ export async function retranslate(deps: TrackerDeps, version: string): Promise<v
   deps.log(`版本 ${version} 重新翻譯完成`);
 }
 
-export async function checkOnce(deps: TrackerDeps): Promise<void> {
+export type CheckResult = 'not-modified' | 'changed';
+
+// 沒有變化時不寫 log, 避免 log 被重複的訊息佔滿. 呼叫端用回傳值顯示最後檢查的結果.
+export async function checkOnce(deps: TrackerDeps): Promise<CheckResult> {
   const state = await deps.loadState();
   const result = await deps.fetchChangelog(state.etag);
-  if (result.status === 'not-modified') {
-    deps.log('CHANGELOG 沒有變化');
-    return;
-  }
+  if (result.status === 'not-modified') return 'not-modified';
 
   const releases = parseReleases(result.body);
 
@@ -109,7 +109,7 @@ export async function checkOnce(deps: TrackerDeps): Promise<void> {
     const latest = latestRelease(releases).version;
     await deps.saveState({ lastVersion: latest, etag: result.etag });
     deps.log(`初始化完成, 目前最新版本 ${latest}`);
-    return;
+    return 'changed';
   }
 
   const newReleases = findNewReleases(releases, state.lastVersion);
@@ -124,4 +124,5 @@ export async function checkOnce(deps: TrackerDeps): Promise<void> {
 
   await deps.saveState({ lastVersion, etag: result.etag });
   if (newReleases.length === 0) deps.log('CHANGELOG 有變化, 但沒有新版本');
+  return 'changed';
 }

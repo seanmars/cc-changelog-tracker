@@ -6,7 +6,7 @@ import { fetchChangelog } from './fetcher.ts';
 import { errorMessage, openLogStore, type LogLevel } from './logs.ts';
 import { openReleaseStore } from './releases.ts';
 import { createScheduler } from './scheduler.ts';
-import { createAdminServer } from './server.ts';
+import { createAdminServer, type LastCheck } from './server.ts';
 import { openSettingsStore, parseSettings, type ParseResult, type TrackerConfig } from './settings.ts';
 import { openStateStore } from './state.ts';
 import { checkOnce, fetchRecent, notifyLatest, notifyVersion, retranslate, type TrackerDeps } from './tracker.ts';
@@ -62,13 +62,20 @@ const args = new Set(process.argv.slice(2));
 if (args.has('--notify-latest')) {
   await notifyLatest(createDeps(requireConfig()));
 } else if (args.has('--once')) {
-  await checkOnce(createDeps(requireConfig()));
+  if ((await checkOnce(createDeps(requireConfig()))) === 'not-modified') log('info', 'CHANGELOG 沒有變化');
 } else {
-  const scheduler = createScheduler({
-    loadConfig,
-    check: (config) => checkOnce(createDeps(config)),
-    log,
-  });
+  // 只存在記憶體中. 啟動後 scheduler 會立刻檢查一次, 所以不需要存到 DB.
+  let lastCheck: LastCheck | null = null;
+  async function check(config: TrackerConfig): Promise<void> {
+    let result: LastCheck['result'] = 'failed';
+    try {
+      result = await checkOnce(createDeps(config));
+    } finally {
+      lastCheck = { time: new Date().toISOString(), result };
+    }
+  }
+
+  const scheduler = createScheduler({ loadConfig, check, log });
   // 抓取多個版本要分類和翻譯, 可能超過 HTTP timeout, 所以在背景執行, 進度寫在 log.
   let fetchJob: Promise<void> | null = null;
   function startFetch(count: number): boolean {
@@ -86,6 +93,7 @@ if (args.has('--notify-latest')) {
     logs: logStore,
     releases: releaseStore,
     loadState: () => stateStore.load(),
+    lastCheck: () => lastCheck,
     onSettingsSaved: () => scheduler.wake(),
     fetchRecent: startFetch,
     isFetching: () => fetchJob !== null,

@@ -71,16 +71,19 @@ test('第一次執行只記錄最新版本, 不送通知', async () => {
   assert.deepEqual(saved.at(-1), { lastVersion: '2.1.3', etag: 'new-etag' });
 });
 
-test('304 時不做任何事', async () => {
+test('304 時不做任何事, 也不寫 log', async () => {
   const { deps, saved, notified } = createDeps({ lastVersion: '2.1.1', etag: 'old' }, { status: 'not-modified' });
-  await checkOnce(deps);
+  const messages: string[] = [];
+  deps.log = (message) => messages.push(message);
+  assert.equal(await checkOnce(deps), 'not-modified');
   assert.deepEqual(notified, []);
   assert.deepEqual(saved, []);
+  assert.deepEqual(messages, []);
 });
 
 test('依序儲存並通知新版本, 最後更新 ETag', async () => {
   const { deps, saved, stored, notified } = createDeps({ lastVersion: '2.1.1', etag: 'old' }, OK);
-  await checkOnce(deps);
+  assert.equal(await checkOnce(deps), 'changed');
   assert.deepEqual(stored, ['2.1.2', '2.1.3']);
   assert.deepEqual(notified, ['2.1.2', '2.1.3']);
   assert.deepEqual(saved.at(-1), { lastVersion: '2.1.3', etag: 'new-etag' });
